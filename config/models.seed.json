@@ -1,0 +1,24 @@
+{
+  "models": [
+    {
+      "id": "gpt-image-2-image-to-image",
+      "label": "GPT Image 2 · Image to Image",
+      "kie_model": "gpt-image-2-image-to-image",
+      "adapter": "gpt-image-2",
+      "max_inputs": 16,
+      "supports_pattern_images": true,
+      "supports_edit_mode": true,
+      "notes": "数据库会在首次启动时自动种子化；此文件仅作文档参考。"
+    },
+    {
+      "id": "nano-banana-pro",
+      "label": "Nano Banana Pro · Concept Image",
+      "kie_model": "nano-banana-pro",
+      "adapter": "nano-banana-pro",
+      "max_inputs": 14,
+      "supports_pattern_images": true,
+      "supports_edit_mode": true,
+      "notes": "Kie Nano Banana Pro 图生图适配器使用 input.image_input。"
+    }
+  ]
+}
