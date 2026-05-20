@@ -6,6 +6,7 @@ export type InputPayloadV2 = {
 };
 
 export type EditMode = "pattern_replace" | "full_redesign";
+export type Workflow = "product_concept" | "pattern_design" | "print_asset";
 
 export type InputPayloadV3 = {
   v: 3;
@@ -14,13 +15,15 @@ export type InputPayloadV3 = {
   reference_urls: string[];
   merged_urls: string[];
   edit_mode: EditMode;
+  workflow?: Workflow;
 };
 
 export function buildInputUrlsStorage(
   productUrls: string[],
   referenceUrls: string[],
   patternUrls: string[] = [],
-  editMode: EditMode = "pattern_replace"
+  editMode: EditMode = "pattern_replace",
+  workflow: Workflow = "product_concept"
 ): string {
   const merged = [...productUrls, ...patternUrls, ...referenceUrls];
   const payload: InputPayloadV3 = {
@@ -30,6 +33,7 @@ export function buildInputUrlsStorage(
     reference_urls: referenceUrls,
     merged_urls: merged,
     edit_mode: editMode,
+    workflow,
   };
   return JSON.stringify(payload);
 }
@@ -40,6 +44,7 @@ export function parseInputPayload(raw: string): {
   reference: string[];
   merged: string[];
   editMode: EditMode;
+  workflow: Workflow;
 } {
   try {
     const v = JSON.parse(raw) as unknown;
@@ -51,6 +56,7 @@ export function parseInputPayload(raw: string): {
         reference: [],
         merged: arr,
         editMode: "pattern_replace",
+        workflow: "product_concept",
       };
     }
     if (v && typeof v === "object" && (v as InputPayloadV2).v === 2) {
@@ -70,6 +76,7 @@ export function parseInputPayload(raw: string): {
         reference,
         merged,
         editMode: "pattern_replace",
+        workflow: "product_concept",
       };
     }
     if (v && typeof v === "object" && (v as InputPayloadV3).v === 3) {
@@ -88,7 +95,11 @@ export function parseInputPayload(raw: string): {
         : [...product, ...pattern, ...reference];
       const editMode: EditMode =
         p.edit_mode === "full_redesign" ? "full_redesign" : "pattern_replace";
-      return { product, pattern, reference, merged, editMode };
+      const workflow: Workflow =
+        p.workflow === "pattern_design" || p.workflow === "print_asset"
+          ? p.workflow
+          : "product_concept";
+      return { product, pattern, reference, merged, editMode, workflow };
     }
   } catch {
     /* fallthrough */
@@ -99,6 +110,7 @@ export function parseInputPayload(raw: string): {
     reference: [],
     merged: [],
     editMode: "pattern_replace",
+    workflow: "product_concept",
   };
 }
 
@@ -161,3 +173,37 @@ export function buildConceptPrompt(params: {
 }
 
 export const buildAugmentedPrompt = buildConceptPrompt;
+
+export function buildPatternDesignPrompt(params: {
+  userPrompt: string;
+  patternCount: number;
+  variantIndex: number;
+  variantTotal: number;
+}): string {
+  const { userPrompt, patternCount, variantIndex, variantTotal } = params;
+  const pc = Math.max(0, patternCount);
+  const roleBlock =
+    `[Image roles - order matches the model image input exactly]\n` +
+    (pc > 0
+      ? `- Images 1..${pc}: DESIGN PATTERN reference images. Use these as source artwork, motifs, composition, color direction, typography, linework, and style references.\n`
+      : `- No design reference image was provided. Follow the written request carefully.\n`);
+
+  const productionBlock =
+    `[Printable pattern output]\n` +
+    `Create a modified print-ready design pattern, not a product mockup or lifestyle photo.\n` +
+    `- Output flat 2D artwork on a clean plain white or transparent-looking white background.\n` +
+    `- Preserve the important subjects, linework, typography, colors, and decorative style from the reference unless the user asks to change them.\n` +
+    `- Apply the user's requested edits directly to the design artwork.\n` +
+    `- Keep all text readable, upright, and level.\n` +
+    `- Keep logos, flowers, illustrations, icons, and borders centered, aligned, and evenly spaced.\n` +
+    `- Remove product mockups, shadows, paper texture, perspective, hands, table surfaces, frames, watermarks, and camera artifacts.\n` +
+    `- Do not place the design on cups, shirts, packaging, signs, posters in rooms, or any physical object.\n` +
+    `- Make the result suitable for direct printing, cutting, sublimation, sticker production, or proofing.\n`;
+
+  const varBlock =
+    variantTotal > 1
+      ? `\n[Variation]\nThis is printable design ${variantIndex + 1} of ${variantTotal}. Make it meaningfully different while respecting the same request.\n`
+      : "";
+
+  return `${roleBlock}\n${productionBlock}${varBlock}\n[Design modification request]\n${userPrompt.trim()}`;
+}

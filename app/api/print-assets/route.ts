@@ -80,7 +80,13 @@ export async function POST(request: Request) {
     prompt: "提取可打印图案版本",
     aspect_ratio: "1:1",
     resolution: "2K",
-    input_urls: buildInputUrlsStorage([sourceUrl], [], [], "pattern_replace"),
+    input_urls: buildInputUrlsStorage(
+      [sourceUrl],
+      [],
+      [],
+      "pattern_replace",
+      "print_asset"
+    ),
     state: "waiting",
     result_urls: null,
     fail_msg: null,

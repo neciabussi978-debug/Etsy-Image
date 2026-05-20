@@ -43,6 +43,7 @@ type ImageSlot = {
 };
 
 type EditMode = "pattern_replace" | "full_redesign";
+type ToolMode = "product_concept" | "pattern_design";
 
 type BatchOutputItem = {
   taskId: string;
@@ -143,6 +144,7 @@ export default function Workbench() {
   const [uploadHint, setUploadHint] = useState<string | null>(null);
   const [models, setModels] = useState<ModelRow[]>([]);
   const [modelId, setModelId] = useState<string>("");
+  const [toolMode, setToolMode] = useState<ToolMode>("product_concept");
   const [prompt, setPrompt] = useState("");
   const [editMode, setEditMode] = useState<EditMode>("pattern_replace");
   const [aspect, setAspect] = useState<string>("auto");
@@ -210,6 +212,8 @@ export default function Workbench() {
   const selectedModel = models.find((m) => m.id === modelId);
   const maxInputs = selectedModel?.max_inputs ?? 16;
   const mergedCount = productSlots.length + refSlots.length;
+  const isPatternDesign = toolMode === "pattern_design";
+  const activeInputCount = isPatternDesign ? refSlots.length : mergedCount;
   const currentResultUrls = useMemo(
     () => batchOutputs?.flatMap((item) => item.resultUrls) ?? [],
     [batchOutputs]
@@ -248,6 +252,15 @@ export default function Workbench() {
     const id = window.setInterval(() => void loadHistory(), FAILED_HISTORY_REFRESH_MS);
     return () => window.clearInterval(id);
   }, [historyHasFailed, loadHistory]);
+
+  const activateToolMode = (mode: ToolMode) => {
+    setToolMode(mode);
+    if (mode === "pattern_design") {
+      setAspect("1:1");
+      setResolution("2K");
+      setEditMode("pattern_replace");
+    }
+  };
 
   const setDownloadActive = (key: string, active: boolean) => {
     setDownloadKeys((prev) => {
@@ -422,32 +435,51 @@ export default function Workbench() {
       setError("请填写修改要求。");
       return;
     }
-    if (productSlots.length === 0) {
+    if (isPatternDesign && refSlots.length === 0) {
+      setError("请至少添加一张设计图案参考图。");
+      return;
+    }
+    if (!isPatternDesign && productSlots.length === 0) {
       setError("请至少添加一张产品参考图。");
       return;
     }
-    if (mergedCount > maxInputs) {
-      setError(`产品参考图与图案素材图合计最多 ${maxInputs} 张。`);
+    if (activeInputCount > maxInputs) {
+      setError(
+        isPatternDesign
+          ? `设计图案参考图最多 ${maxInputs} 张。`
+          : `产品参考图与图案素材图合计最多 ${maxInputs} 张。`
+      );
       return;
     }
     const n = Math.min(10, Math.max(1, Math.floor(imageCount)));
     setBusy(true);
     setBatchOutputs(null);
     try {
-      const r = await fetch("/api/jobs", {
+      const r = await fetch(isPatternDesign ? "/api/pattern-designs" : "/api/jobs", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          modelId,
-          prompt: prompt.trim(),
-          product_urls: productSlots.map((s) => s.url),
-          pattern_urls: refSlots.map((s) => s.url),
-          reference_urls: [],
-          edit_mode: editMode,
-          image_count: n,
-          aspect_ratio: aspect,
-          resolution,
-        }),
+        body: JSON.stringify(
+          isPatternDesign
+            ? {
+                modelId,
+                prompt: prompt.trim(),
+                pattern_urls: refSlots.map((s) => s.url),
+                image_count: n,
+                aspect_ratio: aspect,
+                resolution,
+              }
+            : {
+                modelId,
+                prompt: prompt.trim(),
+                product_urls: productSlots.map((s) => s.url),
+                pattern_urls: refSlots.map((s) => s.url),
+                reference_urls: [],
+                edit_mode: editMode,
+                image_count: n,
+                aspect_ratio: aspect,
+                resolution,
+              }
+        ),
       });
       const j = (await r.json()) as {
         jobs?: { id: string; taskId: string }[];
@@ -626,6 +658,12 @@ export default function Workbench() {
     const g = rows[0];
     if (!g) return;
     const parsed = parseInputPayload(g.input_urls);
+    const nextMode: ToolMode =
+      parsed.workflow === "pattern_design" ||
+      (parsed.product.length === 0 && parsed.pattern.length > 0)
+        ? "pattern_design"
+        : "product_concept";
+    setToolMode(nextMode);
     setPrompt(g.prompt);
     setEditMode(parsed.editMode);
     setAspect(g.aspect_ratio || "auto");
@@ -668,12 +706,41 @@ export default function Workbench() {
 
   return (
     <div className="space-y-8">
+      <section className="rounded-xl border border-canvas-border bg-white p-2 shadow-panel">
+        <div className="grid grid-cols-2 gap-2">
+          <button
+            type="button"
+            onClick={() => activateToolMode("product_concept")}
+            className={`rounded-lg px-3 py-2 text-sm font-semibold transition ${
+              toolMode === "product_concept"
+                ? "bg-accent text-white shadow-sm"
+                : "bg-canvas-muted text-ink hover:bg-canvas-border/40"
+            }`}
+          >
+            产品概念图生成器
+          </button>
+          <button
+            type="button"
+            onClick={() => activateToolMode("pattern_design")}
+            className={`rounded-lg px-3 py-2 text-sm font-semibold transition ${
+              toolMode === "pattern_design"
+                ? "bg-accent text-white shadow-sm"
+                : "bg-canvas-muted text-ink hover:bg-canvas-border/40"
+            }`}
+          >
+            设计图案生成器
+          </button>
+        </div>
+      </section>
+
       <div className="grid min-h-[560px] grid-cols-1 gap-4 lg:grid-cols-12">
         <section className="lg:col-span-4">
           <div className="flex h-full flex-col rounded-xl border border-canvas-border bg-white p-4 shadow-panel">
             <h2 className="text-sm font-semibold text-ink">输入素材</h2>
             <p className="mt-1 text-xs text-ink-muted">
-              上传产品参考图与图案素材图，再填写修改要求，生成产品概念验证图。均支持多选文件与 URL。
+              {isPatternDesign
+                ? "上传设计图案参考图，再填写修改要求，生成修改后的可打印设计图案。均支持多选文件与 URL。"
+                : "上传产品参考图与图案素材图，再填写修改要求，生成产品概念验证图。均支持多选文件与 URL。"}
               {uploadIntro}
               {!kieKeyConfigured && (
                 <span className="mt-1 block text-amber-800">
@@ -687,121 +754,133 @@ export default function Workbench() {
               </p>
             )}
             <p className="mt-2 text-[11px] text-ink-faint">
-              当前合计 {mergedCount} / {maxInputs} 张（产品 {productSlots.length} + 图案 {refSlots.length}）
+              {isPatternDesign
+                ? `当前合计 ${refSlots.length} / ${maxInputs} 张设计图案参考图`
+                : `当前合计 ${mergedCount} / ${maxInputs} 张（产品 ${productSlots.length} + 图案 ${refSlots.length}）`}
             </p>
 
-            <div className="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-2">
+            <div
+              className={`mt-4 grid grid-cols-1 gap-4 ${
+                isPatternDesign ? "" : "sm:grid-cols-2"
+              }`}
+            >
               {/* 产品参考图 */}
-              <div className="flex min-h-0 flex-col rounded-lg border border-canvas-border bg-canvas-muted/40 p-3">
-                <h3 className="text-xs font-semibold text-ink">产品参考图</h3>
-                <p className="mt-0.5 text-[10px] leading-snug text-ink-muted">
-                  保持产品形状、材质、比例与关键结构。
-                </p>
-                <div
-                  className={`mt-2 rounded-lg border border-dashed transition ${
-                    dragOverProduct
-                      ? "border-accent bg-accent/5 ring-2 ring-accent/40"
-                      : "border-canvas-border bg-white/80"
-                  } ${busy ? "pointer-events-none opacity-60" : "cursor-pointer"}`}
-                  role="button"
-                  tabIndex={0}
-                  aria-label="上传产品参考图"
-                  onClick={() => {
-                    if (busy) return;
-                    if (Date.now() - lastDropProductRef.current < 600) return;
-                    fileInputProductRef.current?.click();
-                  }}
-                  onKeyDown={(e) => {
-                    if (busy) return;
-                    if (e.key === "Enter" || e.key === " ") {
-                      e.preventDefault();
+              {!isPatternDesign && (
+                <div className="flex min-h-0 flex-col rounded-lg border border-canvas-border bg-canvas-muted/40 p-3">
+                  <h3 className="text-xs font-semibold text-ink">产品参考图</h3>
+                  <p className="mt-0.5 text-[10px] leading-snug text-ink-muted">
+                    保持产品形状、材质、比例与关键结构。
+                  </p>
+                  <div
+                    className={`mt-2 rounded-lg border border-dashed transition ${
+                      dragOverProduct
+                        ? "border-accent bg-accent/5 ring-2 ring-accent/40"
+                        : "border-canvas-border bg-white/80"
+                    } ${busy ? "pointer-events-none opacity-60" : "cursor-pointer"}`}
+                    role="button"
+                    tabIndex={0}
+                    aria-label="上传产品参考图"
+                    onClick={() => {
+                      if (busy) return;
+                      if (Date.now() - lastDropProductRef.current < 600) return;
                       fileInputProductRef.current?.click();
-                    }
-                  }}
-                  onDragOver={(e) => {
-                    e.preventDefault();
-                    e.dataTransfer.dropEffect = "copy";
-                  }}
-                  onDragEnter={(e) => {
-                    e.preventDefault();
-                    dragDepthProductRef.current += 1;
-                    setDragOverProduct(true);
-                  }}
-                  onDragLeave={(e) => {
-                    e.preventDefault();
-                    dragDepthProductRef.current = Math.max(0, dragDepthProductRef.current - 1);
-                    if (dragDepthProductRef.current === 0) {
-                      setDragOverProduct(false);
-                    }
-                  }}
-                  onDrop={(e) => {
-                    e.preventDefault();
-                    dragDepthProductRef.current = 0;
-                    setDragOverProduct(false);
-                    lastDropProductRef.current = Date.now();
-                    void onFiles(e.dataTransfer.files, "product");
-                  }}
-                >
-                  <input
-                    ref={fileInputProductRef}
-                    type="file"
-                    accept="image/*"
-                    multiple
-                    className="sr-only"
-                    tabIndex={-1}
-                    disabled={busy}
-                    onChange={(e) => {
-                      void onFiles(e.target.files, "product");
-                      e.target.value = "";
                     }}
-                  />
-                  <div className="pointer-events-none px-2 py-6 text-center text-[10px] text-ink-muted">
-                    拖拽或点击上传产品参考图
-                  </div>
-                </div>
-                <div className="mt-2 flex gap-1">
-                  <input
-                    value={pasteProduct}
-                    onChange={(e) => setPasteProduct(e.target.value)}
-                    placeholder="图片 URL"
-                    className="min-w-0 flex-1 rounded-md border border-canvas-border px-2 py-1 text-xs outline-none ring-accent focus:ring-2"
-                  />
-                  <button
-                    type="button"
-                    onClick={() => addUrl("product")}
-                    className="shrink-0 rounded-md bg-accent px-2 py-1 text-xs font-medium text-white hover:bg-accent-hover"
+                    onKeyDown={(e) => {
+                      if (busy) return;
+                      if (e.key === "Enter" || e.key === " ") {
+                        e.preventDefault();
+                        fileInputProductRef.current?.click();
+                      }
+                    }}
+                    onDragOver={(e) => {
+                      e.preventDefault();
+                      e.dataTransfer.dropEffect = "copy";
+                    }}
+                    onDragEnter={(e) => {
+                      e.preventDefault();
+                      dragDepthProductRef.current += 1;
+                      setDragOverProduct(true);
+                    }}
+                    onDragLeave={(e) => {
+                      e.preventDefault();
+                      dragDepthProductRef.current = Math.max(0, dragDepthProductRef.current - 1);
+                      if (dragDepthProductRef.current === 0) {
+                        setDragOverProduct(false);
+                      }
+                    }}
+                    onDrop={(e) => {
+                      e.preventDefault();
+                      dragDepthProductRef.current = 0;
+                      setDragOverProduct(false);
+                      lastDropProductRef.current = Date.now();
+                      void onFiles(e.dataTransfer.files, "product");
+                    }}
                   >
-                    添加
-                  </button>
-                </div>
-                <ul className="mt-2 max-h-40 space-y-1.5 overflow-auto">
-                  {productSlots.map((s) => (
-                    <li
-                      key={s.id}
-                      className="flex items-center gap-2 rounded-md border border-canvas-border bg-white p-1.5"
+                    <input
+                      ref={fileInputProductRef}
+                      type="file"
+                      accept="image/*"
+                      multiple
+                      className="sr-only"
+                      tabIndex={-1}
+                      disabled={busy}
+                      onChange={(e) => {
+                        void onFiles(e.target.files, "product");
+                        e.target.value = "";
+                      }}
+                    />
+                    <div className="pointer-events-none px-2 py-6 text-center text-[10px] text-ink-muted">
+                      拖拽或点击上传产品参考图
+                    </div>
+                  </div>
+                  <div className="mt-2 flex gap-1">
+                    <input
+                      value={pasteProduct}
+                      onChange={(e) => setPasteProduct(e.target.value)}
+                      placeholder="图片 URL"
+                      className="min-w-0 flex-1 rounded-md border border-canvas-border px-2 py-1 text-xs outline-none ring-accent focus:ring-2"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => addUrl("product")}
+                      className="shrink-0 rounded-md bg-accent px-2 py-1 text-xs font-medium text-white hover:bg-accent-hover"
                     >
-                      {/* eslint-disable-next-line @next/next/no-img-element */}
-                      <img src={s.url} alt="" className="h-10 w-10 shrink-0 rounded object-cover" />
-                      <p className="min-w-0 flex-1 truncate text-[10px] text-ink-muted" title={s.url}>
-                        {s.url}
-                      </p>
-                      <button
-                        type="button"
-                        onClick={() => removeSlot("product", s.id)}
-                        className="shrink-0 text-[10px] text-ink-faint hover:text-ink"
+                      添加
+                    </button>
+                  </div>
+                  <ul className="mt-2 max-h-40 space-y-1.5 overflow-auto">
+                    {productSlots.map((s) => (
+                      <li
+                        key={s.id}
+                        className="flex items-center gap-2 rounded-md border border-canvas-border bg-white p-1.5"
                       >
-                        移除
-                      </button>
-                    </li>
-                  ))}
-                </ul>
-              </div>
+                        {/* eslint-disable-next-line @next/next/no-img-element */}
+                        <img src={s.url} alt="" className="h-10 w-10 shrink-0 rounded object-cover" />
+                        <p className="min-w-0 flex-1 truncate text-[10px] text-ink-muted" title={s.url}>
+                          {s.url}
+                        </p>
+                        <button
+                          type="button"
+                          onClick={() => removeSlot("product", s.id)}
+                          className="shrink-0 text-[10px] text-ink-faint hover:text-ink"
+                        >
+                          移除
+                        </button>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
 
               {/* 图案素材图 */}
               <div className="flex min-h-0 flex-col rounded-lg border border-canvas-border bg-canvas-muted/40 p-3">
-                <h3 className="text-xs font-semibold text-ink">图案素材图</h3>
+                <h3 className="text-xs font-semibold text-ink">
+                  {isPatternDesign ? "设计图案参考图" : "图案素材图"}
+                </h3>
                 <p className="mt-0.5 text-[10px] leading-snug text-ink-muted">
-                  logo、花纹、印花、包装图案或纹理；可留空只用文字描述。
+                  {isPatternDesign
+                    ? "参考图案、插画、logo、贴纸、印花或纹理；将输出修改后的平面可打印版本。"
+                    : "logo、花纹、印花、包装图案或纹理；可留空只用文字描述。"}
                 </p>
                 <div
                   className={`mt-2 rounded-lg border border-dashed transition ${
@@ -811,7 +890,7 @@ export default function Workbench() {
                   } ${busy ? "pointer-events-none opacity-60" : "cursor-pointer"}`}
                   role="button"
                   tabIndex={0}
-                  aria-label="上传图案素材图"
+                  aria-label={isPatternDesign ? "上传设计图案参考图" : "上传图案素材图"}
                   onClick={() => {
                     if (busy) return;
                     if (Date.now() - lastDropRefRef.current < 600) return;
@@ -862,7 +941,7 @@ export default function Workbench() {
                     }}
                   />
                   <div className="pointer-events-none px-2 py-6 text-center text-[10px] text-ink-muted">
-                    拖拽或点击上传图案素材图
+                    {isPatternDesign ? "拖拽或点击上传设计图案参考图" : "拖拽或点击上传图案素材图"}
                   </div>
                 </div>
                 <div className="mt-2 flex gap-1">
@@ -927,23 +1006,33 @@ export default function Workbench() {
               onChange={(e) => setPrompt(e.target.value)}
               rows={7}
               className="mt-1 resize-y rounded-md border border-canvas-border px-2 py-2 text-sm outline-none ring-accent focus:ring-2"
-              placeholder="描述希望如何改变图案、颜色、位置、风格或整体概念……"
+              placeholder={
+                isPatternDesign
+                  ? "描述希望如何修改参考图案：替换文字、改颜色、换主题、调整构图、增加元素、做成贴纸/印花/矢量感……"
+                  : "描述希望如何改变图案、颜色、位置、风格或整体概念……"
+              }
             />
-            <label className="mt-3 text-xs font-medium text-ink-muted">修改模式</label>
-            <select
-              value={editMode}
-              onChange={(e) => setEditMode(e.target.value as EditMode)}
-              className="mt-1 rounded-md border border-canvas-border px-2 py-2 text-sm outline-none ring-accent focus:ring-2"
-            >
-              <option value="pattern_replace">仅替换/新增表面图案</option>
-              <option value="full_redesign">整体重设产品概念</option>
-            </select>
-            <p className="mt-1 text-[11px] leading-snug text-ink-faint">
-              保守模式会尽量保持产品结构；整体重设允许改变轮廓、材质和视觉方向。
-            </p>
+            {!isPatternDesign && (
+              <>
+                <label className="mt-3 text-xs font-medium text-ink-muted">修改模式</label>
+                <select
+                  value={editMode}
+                  onChange={(e) => setEditMode(e.target.value as EditMode)}
+                  className="mt-1 rounded-md border border-canvas-border px-2 py-2 text-sm outline-none ring-accent focus:ring-2"
+                >
+                  <option value="pattern_replace">仅替换/新增表面图案</option>
+                  <option value="full_redesign">整体重设产品概念</option>
+                </select>
+                <p className="mt-1 text-[11px] leading-snug text-ink-faint">
+                  保守模式会尽量保持产品结构；整体重设允许改变轮廓、材质和视觉方向。
+                </p>
+              </>
+            )}
             <label className="mt-3 text-xs font-medium text-ink-muted">生成数量</label>
             <p className="mt-0.5 text-[10px] text-ink-faint">
-              将按顺序创建多个独立 Kie 任务（每张 1 次调用），最多 10。
+              {isPatternDesign
+                ? "将输出可直接打印的平面设计图案；每张 1 次调用，最多 10。"
+                : "将按顺序创建多个独立 Kie 任务（每张 1 次调用），最多 10。"}
             </p>
             <input
               type="number"
@@ -975,7 +1064,9 @@ export default function Workbench() {
                   ))}
                 </select>
                 <p className="mt-1 text-[11px] leading-snug text-ink-faint">
-                  auto 或未指定时通常仅支持 1K；1:1 不可 4K（以 Kie 文档为准）。
+                  {isPatternDesign
+                    ? "图案生成默认 1:1，便于打印、贴纸和后续裁切。"
+                    : "auto 或未指定时通常仅支持 1K；1:1 不可 4K（以 Kie 文档为准）。"}
                 </p>
               </div>
               <div>
@@ -1003,6 +1094,7 @@ export default function Workbench() {
               className="mt-auto w-full rounded-lg bg-accent py-2.5 text-sm font-semibold text-white shadow-sm hover:bg-accent-hover disabled:opacity-50"
             >
               {busy ? "处理中…" : "生成"}
+              {busy ? "" : isPatternDesign ? "设计图案" : ""}
             </button>
           </div>
         </section>
@@ -1030,9 +1122,13 @@ export default function Workbench() {
             <div className="mt-3 rounded-lg border border-canvas-border bg-canvas-muted/40 p-3">
               <div className="flex flex-wrap items-center justify-between gap-2">
                 <div>
-                  <h3 className="text-xs font-semibold text-ink">打印图案</h3>
+                  <h3 className="text-xs font-semibold text-ink">
+                    {isPatternDesign ? "可打印图案下载" : "打印图案"}
+                  </h3>
                   <p className="mt-0.5 text-[11px] text-ink-muted">
-                    从结果图中提取平面图案；多图案会整理成可打印排版。
+                    {isPatternDesign
+                      ? "设计图案生成器的结果已经是平面打印版，可直接保存 PNG 或 PDF。"
+                      : "从结果图中提取平面图案；多图案会整理成可打印排版。"}
                   </p>
                 </div>
                 <select
@@ -1044,62 +1140,88 @@ export default function Workbench() {
                   <option value="pdf">PDF</option>
                 </select>
               </div>
-              <div className="mt-2 flex flex-wrap items-center gap-2">
-                {printSourceUrl ? (
-                  <>
-                    {/* eslint-disable-next-line @next/next/no-img-element */}
-                    <img
-                      src={printSourceUrl}
-                      alt=""
-                      className="h-12 w-12 rounded-md border border-canvas-border object-cover"
-                    />
-                    <span className="min-w-0 flex-1 truncate text-[11px] text-ink-faint">
-                      已选择图片
-                    </span>
-                  </>
-                ) : (
+              {isPatternDesign ? (
+                <div className="mt-2 flex flex-wrap items-center gap-2">
                   <span className="text-[11px] text-ink-faint">
-                    先在下方结果或历史中点“选择打印图案”，再生成可打印排版。
+                    {currentResultUrls.length > 0
+                      ? `当前可下载 ${currentResultUrls.length} 张。`
+                      : "生成完成后可在这里直接下载。"}
                   </span>
-                )}
-                <button
-                  type="button"
-                  disabled={!printSourceUrl || printBusy}
-                  onClick={() => void startPrintAsset()}
-                  className="rounded-md bg-accent px-2 py-1 text-xs font-medium text-white hover:bg-accent-hover disabled:opacity-50"
-                >
-                  {printBusy ? "提交中…" : "生成打印版"}
-                </button>
-                {printJob?.state === "success" && printJob.resultUrls.length > 0 && (
                   <button
                     type="button"
-                    disabled={downloadKeys.has("print-asset")}
+                    disabled={
+                      currentResultUrls.length === 0 || downloadKeys.has("pattern-print")
+                    }
                     onClick={() =>
-                      void saveImages(printJob.resultUrls, "print-asset", printFormat)
+                      void saveImages(currentResultUrls, "pattern-print", printFormat)
                     }
                     className="rounded-md border border-canvas-border bg-white px-2 py-1 text-xs font-medium text-ink hover:bg-canvas-muted disabled:opacity-50"
                   >
-                    {downloadKeys.has("print-asset")
+                    {downloadKeys.has("pattern-print")
                       ? "保存中…"
                       : `下载 ${printFormat.toUpperCase()}`}
                   </button>
-                )}
-              </div>
-              {printJob && (
-                <div className="mt-2 flex flex-wrap items-start gap-2 text-[11px] text-ink-muted">
-                  <span className="rounded bg-white px-1.5 py-0.5">{printJob.state}</span>
-                  {printJob.failMsg && <span className="text-red-600">{printJob.failMsg}</span>}
-                  {printJob.state === "success" &&
-                    printJob.resultUrls.map((u) => (
-                      // eslint-disable-next-line @next/next/no-img-element
-                      <img
-                        key={u}
-                        src={u}
-                        alt=""
-                        className="max-h-28 rounded-md border border-canvas-border bg-white object-contain"
-                      />
-                    ))}
                 </div>
+              ) : (
+                <>
+                  <div className="mt-2 flex flex-wrap items-center gap-2">
+                    {printSourceUrl ? (
+                      <>
+                        {/* eslint-disable-next-line @next/next/no-img-element */}
+                        <img
+                          src={printSourceUrl}
+                          alt=""
+                          className="h-12 w-12 rounded-md border border-canvas-border object-cover"
+                        />
+                        <span className="min-w-0 flex-1 truncate text-[11px] text-ink-faint">
+                          已选择图片
+                        </span>
+                      </>
+                    ) : (
+                      <span className="text-[11px] text-ink-faint">
+                        先在下方结果或历史中点“选择打印图案”，再生成可打印排版。
+                      </span>
+                    )}
+                    <button
+                      type="button"
+                      disabled={!printSourceUrl || printBusy}
+                      onClick={() => void startPrintAsset()}
+                      className="rounded-md bg-accent px-2 py-1 text-xs font-medium text-white hover:bg-accent-hover disabled:opacity-50"
+                    >
+                      {printBusy ? "提交中…" : "生成打印版"}
+                    </button>
+                    {printJob?.state === "success" && printJob.resultUrls.length > 0 && (
+                      <button
+                        type="button"
+                        disabled={downloadKeys.has("print-asset")}
+                        onClick={() =>
+                          void saveImages(printJob.resultUrls, "print-asset", printFormat)
+                        }
+                        className="rounded-md border border-canvas-border bg-white px-2 py-1 text-xs font-medium text-ink hover:bg-canvas-muted disabled:opacity-50"
+                      >
+                        {downloadKeys.has("print-asset")
+                          ? "保存中…"
+                          : `下载 ${printFormat.toUpperCase()}`}
+                      </button>
+                    )}
+                  </div>
+                  {printJob && (
+                    <div className="mt-2 flex flex-wrap items-start gap-2 text-[11px] text-ink-muted">
+                      <span className="rounded bg-white px-1.5 py-0.5">{printJob.state}</span>
+                      {printJob.failMsg && <span className="text-red-600">{printJob.failMsg}</span>}
+                      {printJob.state === "success" &&
+                        printJob.resultUrls.map((u) => (
+                          // eslint-disable-next-line @next/next/no-img-element
+                          <img
+                            key={u}
+                            src={u}
+                            alt=""
+                            className="max-h-28 rounded-md border border-canvas-border bg-white object-contain"
+                          />
+                        ))}
+                    </div>
+                  )}
+                </>
               )}
             </div>
             {!batchOutputs && (
@@ -1146,7 +1268,9 @@ export default function Workbench() {
                               <button
                                 type="button"
                                 onClick={() => selectPrintSource(u)}
-                                className="inline-flex items-center justify-center rounded-md border border-canvas-border bg-white px-2 py-1 font-medium text-ink hover:bg-canvas-muted"
+                                className={`inline-flex items-center justify-center rounded-md border border-canvas-border bg-white px-2 py-1 font-medium text-ink hover:bg-canvas-muted ${
+                                  isPatternDesign ? "hidden" : ""
+                                }`}
                               >
                                 选择打印图案
                               </button>
@@ -1178,6 +1302,10 @@ export default function Workbench() {
           {historyProjects.map((project) => {
             const thumb = project.resultUrls[0];
             const imageTotal = project.resultUrls.length || project.rows.length;
+            const projectWorkflow = parseInputPayload(
+              project.rows[0]?.input_urls ?? "[]"
+            ).workflow;
+            const projectIsPattern = projectWorkflow === "pattern_design";
             return (
               <article
                 key={project.key}
@@ -1210,6 +1338,7 @@ export default function Workbench() {
                     <p className="line-clamp-2 text-xs text-ink-muted">{project.prompt}</p>
                     <p className="text-[11px] text-ink-faint">
                       {new Date(project.createdAt).toLocaleString()} · {project.model}
+                      {projectIsPattern ? " · 设计图案" : ""}
                     </p>
                   </div>
                 </button>
@@ -1229,13 +1358,15 @@ export default function Workbench() {
                           ? "下载全部"
                           : "下载"}
                     </button>
-                    <button
-                      type="button"
-                      onClick={() => selectPrintSource(project.resultUrls[0])}
-                      className="text-xs font-medium text-accent hover:underline"
-                    >
-                      选择打印图案
-                    </button>
+                    {!projectIsPattern && (
+                      <button
+                        type="button"
+                        onClick={() => selectPrintSource(project.resultUrls[0])}
+                        className="text-xs font-medium text-accent hover:underline"
+                      >
+                        选择打印图案
+                      </button>
+                    )}
                   </div>
                 )}
               </article>
