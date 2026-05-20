@@ -2,8 +2,8 @@ import { randomUUID } from "crypto";
 import { NextResponse } from "next/server";
 import { getModelById, insertGeneration } from "@/lib/db";
 import {
+  buildImageEditPrompt,
   buildInputUrlsStorage,
-  buildPatternDesignPrompt,
 } from "@/lib/input-payload";
 import { isAllowedInputImageUrl } from "@/lib/input-url";
 import { buildKieCreateTaskBody } from "@/lib/kie/adapters";
@@ -16,19 +16,14 @@ const ASPECTS = new Set(["auto", "1:1", "9:16", "16:9", "4:3", "3:4"]);
 const RESOLUTIONS = new Set(["1K", "2K", "4K"]);
 
 type Body = {
+  source_url?: string;
   modelId?: string;
   prompt?: string;
-  pattern_urls?: string[];
   image_count?: number;
   aspect_ratio?: string;
   resolution?: string;
-  separate_outputs?: boolean;
+  printable_pattern?: boolean;
 };
-
-function cleanUrls(urls: unknown): string[] {
-  if (!Array.isArray(urls)) return [];
-  return urls.filter((u): u is string => typeof u === "string").map((u) => u.trim());
-}
 
 export async function POST(request: Request) {
   const apiKey = getEffectiveKieApiKey();
@@ -46,76 +41,54 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "无效的 JSON" }, { status: 400 });
   }
 
+  const sourceUrl = body.source_url?.trim();
+  if (!sourceUrl || !isAllowedInputImageUrl(sourceUrl)) {
+    return NextResponse.json({ error: "请选择有效的已生成图片 URL" }, { status: 400 });
+  }
   if (!body.modelId) {
     return NextResponse.json({ error: "modelId 必填" }, { status: 400 });
   }
   if (!body.prompt?.trim()) {
-    return NextResponse.json({ error: "修改要求必填" }, { status: 400 });
+    return NextResponse.json({ error: "请填写继续修改要求" }, { status: 400 });
   }
 
   const modelRow = getModelById(body.modelId);
   if (!modelRow || !modelRow.enabled) {
     return NextResponse.json({ error: "模型不可用或未找到" }, { status: 400 });
   }
-  if (!modelRow.supports_pattern_images) {
-    return NextResponse.json(
-      { error: "当前模型未标记支持图案参考图，请到模型页切换或调整配置。" },
-      { status: 400 }
-    );
-  }
 
-  const patternUrls = cleanUrls(body.pattern_urls);
-  if (patternUrls.length === 0) {
-    return NextResponse.json({ error: "请至少添加一张设计图案参考图。" }, { status: 400 });
-  }
-  for (const url of patternUrls) {
-    if (!isAllowedInputImageUrl(url)) {
-      return NextResponse.json(
-        { error: `设计图案参考图 URL 不合法：${url}` },
-        { status: 400 }
-      );
-    }
-  }
-  if (patternUrls.length > modelRow.max_inputs) {
-    return NextResponse.json(
-      { error: `输入图最多 ${modelRow.max_inputs} 张。` },
-      { status: 400 }
-    );
-  }
-
-  const imageCount = Math.min(24, Math.max(1, Math.floor(body.image_count ?? 1)));
-  const aspect = body.aspect_ratio ?? "1:1";
+  const imageCount = Math.min(10, Math.max(1, Math.floor(body.image_count ?? 1)));
+  const aspect = body.aspect_ratio ?? "auto";
   if (!ASPECTS.has(aspect)) {
     return NextResponse.json({ error: "无效的 aspect_ratio" }, { status: 400 });
   }
-  const resolution = body.resolution ?? "2K";
+  const resolution = body.resolution ?? "1K";
   if (!RESOLUTIONS.has(resolution)) {
     return NextResponse.json({ error: "无效的 resolution" }, { status: 400 });
   }
 
   const batchId = randomUUID();
   const inputUrlsJson = buildInputUrlsStorage(
+    [sourceUrl],
     [],
     [],
-    patternUrls,
     "pattern_replace",
-    "pattern_design"
+    "image_edit"
   );
   const jobs: { id: string; taskId: string }[] = [];
 
   for (let i = 0; i < imageCount; i++) {
-    const fullPrompt = buildPatternDesignPrompt({
+    const fullPrompt = buildImageEditPrompt({
       userPrompt: body.prompt.trim(),
-      patternCount: patternUrls.length,
+      printablePattern: Boolean(body.printable_pattern),
       variantIndex: i,
       variantTotal: imageCount,
-      separateOutputs: Boolean(body.separate_outputs),
     });
 
     const kieBody = buildKieCreateTaskBody(modelRow, {
       prompt: fullPrompt,
-      productUrls: [],
-      patternUrls,
+      productUrls: [sourceUrl],
+      patternUrls: [],
       referenceUrls: [],
       aspectRatio: aspect,
       resolution,
@@ -144,7 +117,7 @@ export async function POST(request: Request) {
       id,
       task_id: created.data.taskId,
       model: modelRow.id,
-      prompt: body.prompt.trim(),
+      prompt: `继续修改：${body.prompt.trim()}`,
       aspect_ratio: aspect,
       resolution,
       input_urls: inputUrlsJson,

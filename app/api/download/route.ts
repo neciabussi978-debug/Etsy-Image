@@ -3,6 +3,7 @@ import fs from "fs/promises";
 import path from "path";
 import { getEffectiveDownloadDir } from "@/lib/download-settings";
 import { imageBufferToSinglePagePdf } from "@/lib/pdf-image";
+import { whiteToTransparentPng } from "@/lib/png-transparency";
 
 export const dynamic = "force-dynamic";
 
@@ -126,7 +127,7 @@ async function writeOutputImage(body: Buffer, ext: string, startIndex: number) {
   };
 }
 
-type DownloadFormat = "original" | "png" | "pdf";
+type DownloadFormat = "original" | "png" | "pdf" | "transparent_png";
 
 async function saveRemoteImage(
   url: string,
@@ -149,6 +150,16 @@ async function saveRemoteImage(
       url,
       ...file,
       contentType: "application/pdf",
+    };
+  }
+
+  if (format === "transparent_png") {
+    const png = whiteToTransparentPng(body);
+    const file = await writeOutputImage(png, ".png", startIndex);
+    return {
+      url,
+      ...file,
+      contentType: "image/png",
     };
   }
 
@@ -204,7 +215,13 @@ export async function POST(request: Request) {
     (u): u is string => typeof u === "string" && u.trim().length > 0
   );
   const format: DownloadFormat =
-    body.format === "pdf" ? "pdf" : body.format === "png" ? "png" : "original";
+    body.format === "pdf"
+      ? "pdf"
+      : body.format === "png"
+        ? "png"
+        : body.format === "transparent_png"
+          ? "transparent_png"
+          : "original";
 
   if (urls.length === 0) {
     return NextResponse.json({ error: "缺少下载地址" }, { status: 400 });

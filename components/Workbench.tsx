@@ -60,7 +60,7 @@ type DownloadedFile = {
   path: string;
 };
 
-type PrintFormat = "png" | "pdf";
+type PrintFormat = "png" | "transparent_png" | "pdf";
 
 type HistoryProject = {
   key: string;
@@ -94,6 +94,11 @@ function formatGenDuration(ms: number | null | undefined): string {
   if (ms == null || !Number.isFinite(ms) || ms < 0) return "—";
   if (ms < 1000) return `${Math.round(ms)} ms`;
   return `${(ms / 1000).toFixed(1)} s`;
+}
+
+function formatPrintFormat(format: PrintFormat): string {
+  if (format === "transparent_png") return "PNG 透明底";
+  return format.toUpperCase();
 }
 
 function sortProjectRows(rows: Generation[]): Generation[] {
@@ -163,6 +168,11 @@ export default function Workbench() {
   const [printFormat, setPrintFormat] = useState<PrintFormat>("png");
   const [printJob, setPrintJob] = useState<BatchOutputItem | null>(null);
   const [printBusy, setPrintBusy] = useState(false);
+  const [editSourceUrl, setEditSourceUrl] = useState<string | null>(null);
+  const [editPrompt, setEditPrompt] = useState("");
+  const [editPrintablePattern, setEditPrintablePattern] = useState(false);
+  const [editBusy, setEditBusy] = useState(false);
+  const [separatePatternOutputs, setSeparatePatternOutputs] = useState(false);
   const [history, setHistory] = useState<Generation[]>([]);
   const pollStartRef = useRef<number | null>(null);
   const batchOutputsRef = useRef<BatchOutputItem[] | null>(null);
@@ -214,6 +224,7 @@ export default function Workbench() {
   const mergedCount = productSlots.length + refSlots.length;
   const isPatternDesign = toolMode === "pattern_design";
   const activeInputCount = isPatternDesign ? refSlots.length : mergedCount;
+  const maxBatchCount = isPatternDesign ? 24 : 10;
   const currentResultUrls = useMemo(
     () => batchOutputs?.flatMap((item) => item.resultUrls) ?? [],
     [batchOutputs]
@@ -259,6 +270,10 @@ export default function Workbench() {
       setAspect("1:1");
       setResolution("2K");
       setEditMode("pattern_replace");
+      setEditPrintablePattern(true);
+    } else {
+      setEditPrintablePattern(false);
+      setImageCount((count) => Math.min(10, count));
     }
   };
 
@@ -383,6 +398,14 @@ export default function Workbench() {
     setDownloadMessage(null);
   };
 
+  const selectEditSource = (url: string, printablePattern = false) => {
+    setEditSourceUrl(url);
+    setEditPrintablePattern(printablePattern);
+    setEditPrompt("");
+    setError(null);
+    setDownloadMessage(null);
+  };
+
   const startPrintAsset = async () => {
     setError(null);
     if (!printSourceUrl) {
@@ -422,6 +445,64 @@ export default function Workbench() {
       setError(e instanceof Error ? e.message : "创建打印图案任务失败");
     } finally {
       setPrintBusy(false);
+    }
+  };
+
+  const startEditJob = async () => {
+    setError(null);
+    if (!editSourceUrl) {
+      setError("请先从结果或历史中选择一张要继续修改的图片。");
+      return;
+    }
+    if (!modelId) {
+      setError("请选择模型（或到「模型」页启用一个默认模型）。");
+      return;
+    }
+    if (!editPrompt.trim()) {
+      setError("请填写继续修改要求。");
+      return;
+    }
+
+    const n = Math.min(maxBatchCount, Math.max(1, Math.floor(imageCount)));
+    setEditBusy(true);
+    setBatchOutputs(null);
+    try {
+      const r = await fetch("/api/image-edits", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          modelId,
+          source_url: editSourceUrl,
+          prompt: editPrompt.trim(),
+          image_count: n,
+          aspect_ratio: aspect,
+          resolution,
+          printable_pattern: editPrintablePattern,
+        }),
+      });
+      const j = (await r.json()) as {
+        jobs?: { id: string; taskId: string }[];
+        error?: string;
+        partial?: boolean;
+      };
+      if (!r.ok) throw new Error(j.error || "创建继续修改任务失败");
+      if (!j.jobs?.length) throw new Error(j.error || "未返回任务列表");
+      if (j.partial && j.error) setError(j.error);
+      pollStartRef.current = Date.now();
+      const now = Date.now();
+      setBatchOutputs(
+        j.jobs.map((job) => ({
+          taskId: job.taskId,
+          submittedAt: now,
+          state: "waiting",
+          resultUrls: [],
+        }))
+      );
+      void loadHistory();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "创建继续修改任务失败");
+    } finally {
+      setEditBusy(false);
     }
   };
 
@@ -467,6 +548,7 @@ export default function Workbench() {
                 image_count: n,
                 aspect_ratio: aspect,
                 resolution,
+                separate_outputs: separatePatternOutputs,
               }
             : {
                 modelId,
@@ -1031,24 +1113,40 @@ export default function Workbench() {
             <label className="mt-3 text-xs font-medium text-ink-muted">生成数量</label>
             <p className="mt-0.5 text-[10px] text-ink-faint">
               {isPatternDesign
-                ? "将输出可直接打印的平面设计图案；每张 1 次调用，最多 10。"
+                ? "将输出可直接打印的平面设计图案；每张 1 次调用，最多 24。"
                 : "将按顺序创建多个独立 Kie 任务（每张 1 次调用），最多 10。"}
             </p>
             <input
               type="number"
               min={1}
-              max={10}
+              max={maxBatchCount}
               value={imageCount}
               onChange={(e) => {
                 const v = Number(e.target.value);
                 if (!Number.isFinite(v)) return;
-                setImageCount(Math.min(10, Math.max(1, Math.floor(v))));
+                setImageCount(Math.min(maxBatchCount, Math.max(1, Math.floor(v))));
               }}
               onBlur={() =>
-                setImageCount((c) => Math.min(10, Math.max(1, Math.floor(c)) || 1))
+                setImageCount((c) =>
+                  Math.min(maxBatchCount, Math.max(1, Math.floor(c)) || 1)
+                )
               }
               className="mt-1 w-28 rounded-md border border-canvas-border px-2 py-2 text-sm outline-none ring-accent focus:ring-2"
             />
+            {isPatternDesign && (
+              <label className="mt-3 flex items-start gap-2 rounded-lg border border-canvas-border bg-canvas-muted/40 p-2 text-xs text-ink-muted">
+                <input
+                  type="checkbox"
+                  checked={separatePatternOutputs}
+                  onChange={(e) => setSeparatePatternOutputs(e.target.checked)}
+                  className="mt-0.5"
+                />
+                <span>
+                  每个图案单独成一张图片。适合 12 个月份生日花、系列贴纸、多个 logo
+                  方案等；生成数量就是要拆出的单图数量。
+                </span>
+              </label>
+            )}
             <div className="mt-4 grid grid-cols-2 gap-3">
               <div>
                 <label className="text-xs font-medium text-ink-muted">宽高比</label>
@@ -1127,7 +1225,7 @@ export default function Workbench() {
                   </h3>
                   <p className="mt-0.5 text-[11px] text-ink-muted">
                     {isPatternDesign
-                      ? "设计图案生成器的结果已经是平面打印版，可直接保存 PNG 或 PDF。"
+                      ? "设计图案生成器的结果已经是平面打印版，可直接保存 PNG、透明 PNG 或 PDF。"
                       : "从结果图中提取平面图案；多图案会整理成可打印排版。"}
                   </p>
                 </div>
@@ -1137,6 +1235,7 @@ export default function Workbench() {
                   className="rounded-md border border-canvas-border bg-white px-2 py-1 text-xs outline-none ring-accent focus:ring-2"
                 >
                   <option value="png">PNG</option>
+                  <option value="transparent_png">PNG 透明底</option>
                   <option value="pdf">PDF</option>
                 </select>
               </div>
@@ -1159,7 +1258,7 @@ export default function Workbench() {
                   >
                     {downloadKeys.has("pattern-print")
                       ? "保存中…"
-                      : `下载 ${printFormat.toUpperCase()}`}
+                      : `下载 ${formatPrintFormat(printFormat)}`}
                   </button>
                 </div>
               ) : (
@@ -1201,7 +1300,7 @@ export default function Workbench() {
                       >
                         {downloadKeys.has("print-asset")
                           ? "保存中…"
-                          : `下载 ${printFormat.toUpperCase()}`}
+                          : `下载 ${formatPrintFormat(printFormat)}`}
                       </button>
                     )}
                   </div>
@@ -1222,6 +1321,54 @@ export default function Workbench() {
                     </div>
                   )}
                 </>
+              )}
+            </div>
+            <div className="mt-3 rounded-lg border border-canvas-border bg-white p-3">
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <div>
+                  <h3 className="text-xs font-semibold text-ink">继续修改</h3>
+                  <p className="mt-0.5 text-[11px] text-ink-muted">
+                    选择已生成图片作为基础，再输入新的修改要求继续生图。
+                  </p>
+                </div>
+                {editSourceUrl && (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img
+                    src={editSourceUrl}
+                    alt=""
+                    className="h-12 w-12 rounded-md border border-canvas-border object-cover"
+                  />
+                )}
+              </div>
+              <textarea
+                value={editPrompt}
+                onChange={(e) => setEditPrompt(e.target.value)}
+                rows={3}
+                placeholder="例如：把文字改成 June Rose，花朵颜色换成粉色，其他布局保持不变……"
+                className="mt-2 w-full resize-y rounded-md border border-canvas-border px-2 py-2 text-xs outline-none ring-accent focus:ring-2"
+              />
+              <div className="mt-2 flex flex-wrap items-center gap-2">
+                <label className="flex items-center gap-1 text-[11px] text-ink-muted">
+                  <input
+                    type="checkbox"
+                    checked={editPrintablePattern}
+                    onChange={(e) => setEditPrintablePattern(e.target.checked)}
+                  />
+                  保持平面可打印图案
+                </label>
+                <button
+                  type="button"
+                  disabled={!editSourceUrl || !editPrompt.trim() || editBusy}
+                  onClick={() => void startEditJob()}
+                  className="ml-auto rounded-md bg-accent px-2 py-1 text-xs font-medium text-white hover:bg-accent-hover disabled:opacity-50"
+                >
+                  {editBusy ? "提交中…" : "继续修改"}
+                </button>
+              </div>
+              {!editSourceUrl && (
+                <p className="mt-2 text-[11px] text-ink-faint">
+                  在结果图或历史图下方点击“继续修改”来选择图片。
+                </p>
               )}
             </div>
             {!batchOutputs && (
@@ -1273,6 +1420,13 @@ export default function Workbench() {
                                 }`}
                               >
                                 选择打印图案
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => selectEditSource(u, isPatternDesign)}
+                                className="inline-flex items-center justify-center rounded-md border border-canvas-border bg-white px-2 py-1 font-medium text-ink hover:bg-canvas-muted"
+                              >
+                                继续修改
                               </button>
                             </div>
                           </figure>
@@ -1367,6 +1521,13 @@ export default function Workbench() {
                         选择打印图案
                       </button>
                     )}
+                    <button
+                      type="button"
+                      onClick={() => selectEditSource(project.resultUrls[0], projectIsPattern)}
+                      className="text-xs font-medium text-accent hover:underline"
+                    >
+                      继续修改
+                    </button>
                   </div>
                 )}
               </article>

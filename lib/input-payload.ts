@@ -6,7 +6,11 @@ export type InputPayloadV2 = {
 };
 
 export type EditMode = "pattern_replace" | "full_redesign";
-export type Workflow = "product_concept" | "pattern_design" | "print_asset";
+export type Workflow =
+  | "product_concept"
+  | "pattern_design"
+  | "print_asset"
+  | "image_edit";
 
 export type InputPayloadV3 = {
   v: 3;
@@ -96,7 +100,9 @@ export function parseInputPayload(raw: string): {
       const editMode: EditMode =
         p.edit_mode === "full_redesign" ? "full_redesign" : "pattern_replace";
       const workflow: Workflow =
-        p.workflow === "pattern_design" || p.workflow === "print_asset"
+        p.workflow === "pattern_design" ||
+        p.workflow === "print_asset" ||
+        p.workflow === "image_edit"
           ? p.workflow
           : "product_concept";
       return { product, pattern, reference, merged, editMode, workflow };
@@ -179,8 +185,15 @@ export function buildPatternDesignPrompt(params: {
   patternCount: number;
   variantIndex: number;
   variantTotal: number;
+  separateOutputs?: boolean;
 }): string {
-  const { userPrompt, patternCount, variantIndex, variantTotal } = params;
+  const {
+    userPrompt,
+    patternCount,
+    variantIndex,
+    variantTotal,
+    separateOutputs = false,
+  } = params;
   const pc = Math.max(0, patternCount);
   const roleBlock =
     `[Image roles - order matches the model image input exactly]\n` +
@@ -200,10 +213,46 @@ export function buildPatternDesignPrompt(params: {
     `- Do not place the design on cups, shirts, packaging, signs, posters in rooms, or any physical object.\n` +
     `- Make the result suitable for direct printing, cutting, sublimation, sticker production, or proofing.\n`;
 
-  const varBlock =
-    variantTotal > 1
-      ? `\n[Variation]\nThis is printable design ${variantIndex + 1} of ${variantTotal}. Make it meaningfully different while respecting the same request.\n`
+  const separationBlock =
+    separateOutputs && variantTotal > 1
+      ? `[Separate single-design output]\n` +
+        `Create exactly one standalone printable design in this image: item ${variantIndex + 1} of ${variantTotal}.\n` +
+        `If the reference or request contains multiple motifs, months, names, flowers, characters, or options, do not combine them into a grid or sheet. Focus only on the ${variantIndex + 1} item and leave generous clean margins.\n`
       : "";
 
-  return `${roleBlock}\n${productionBlock}${varBlock}\n[Design modification request]\n${userPrompt.trim()}`;
+  const varBlock =
+    variantTotal > 1
+      ? `\n[Variation]\nThis is printable design ${variantIndex + 1} of ${variantTotal}. ${
+          separateOutputs
+            ? "It should be a separate standalone file-style artwork, not a combined sheet."
+            : "Make it meaningfully different while respecting the same request."
+        }\n`
+      : "";
+
+  return `${roleBlock}\n${productionBlock}${separationBlock}${varBlock}\n[Design modification request]\n${userPrompt.trim()}`;
+}
+
+export function buildImageEditPrompt(params: {
+  userPrompt: string;
+  printablePattern: boolean;
+  variantIndex: number;
+  variantTotal: number;
+}): string {
+  const { userPrompt, printablePattern, variantIndex, variantTotal } = params;
+  const baseBlock =
+    `[Image edit source]\n` +
+    `Image 1 is the current generated image to continue editing. Apply the user's requested change to this image while preserving all unrelated details, composition, subject identity, layout, and visual style.\n`;
+
+  const outputBlock = printablePattern
+    ? `[Printable pattern constraints]\n` +
+      `Keep the result as flat 2D print-ready artwork. Use a clean white or transparent-looking background, keep text upright and readable, preserve crisp linework, and do not turn the design into a product mockup or lifestyle scene.\n`
+    : `[Edit constraints]\n` +
+      `Make only the requested modification. Do not unexpectedly change product shape, camera angle, lighting, background, text, or decorative elements that the user did not ask to change.\n`;
+
+  const varBlock =
+    variantTotal > 1
+      ? `\n[Variation]\nThis is edited version ${variantIndex + 1} of ${variantTotal}. Keep the same requested edit but provide a meaningfully distinct option.\n`
+      : "";
+
+  return `${baseBlock}\n${outputBlock}${varBlock}\n[Continue editing request]\n${userPrompt.trim()}`;
 }
