@@ -172,6 +172,8 @@ export default function Workbench() {
   const [editPrompt, setEditPrompt] = useState("");
   const [editPrintablePattern, setEditPrintablePattern] = useState(false);
   const [editBusy, setEditBusy] = useState(false);
+  const [editImageCount, setEditImageCount] = useState(1);
+  const [editSeparateOutputs, setEditSeparateOutputs] = useState(false);
   const [separatePatternOutputs, setSeparatePatternOutputs] = useState(false);
   const [history, setHistory] = useState<Generation[]>([]);
   const pollStartRef = useRef<number | null>(null);
@@ -402,6 +404,8 @@ export default function Workbench() {
     setEditSourceUrl(url);
     setEditPrintablePattern(printablePattern);
     setEditPrompt("");
+    setEditImageCount(1);
+    setEditSeparateOutputs(false);
     setError(null);
     setDownloadMessage(null);
   };
@@ -463,7 +467,8 @@ export default function Workbench() {
       return;
     }
 
-    const n = Math.min(maxBatchCount, Math.max(1, Math.floor(imageCount)));
+    const editMax = editSeparateOutputs ? 24 : 10;
+    const n = Math.min(editMax, Math.max(1, Math.floor(editImageCount)));
     setEditBusy(true);
     setBatchOutputs(null);
     try {
@@ -478,6 +483,7 @@ export default function Workbench() {
           aspect_ratio: aspect,
           resolution,
           printable_pattern: editPrintablePattern,
+          separate_outputs: editSeparateOutputs,
         }),
       });
       const j = (await r.json()) as {
@@ -1349,12 +1355,49 @@ export default function Workbench() {
               />
               <div className="mt-2 flex flex-wrap items-center gap-2">
                 <label className="flex items-center gap-1 text-[11px] text-ink-muted">
+                  <span>生成数量</span>
+                  <input
+                    type="number"
+                    min={1}
+                    max={editSeparateOutputs ? 24 : 10}
+                    value={editImageCount}
+                    onChange={(e) => {
+                      const v = Number(e.target.value);
+                      if (!Number.isFinite(v)) return;
+                      setEditImageCount(
+                        Math.min(editSeparateOutputs ? 24 : 10, Math.max(1, Math.floor(v)))
+                      );
+                    }}
+                    onBlur={() =>
+                      setEditImageCount((count) =>
+                        Math.min(
+                          editSeparateOutputs ? 24 : 10,
+                          Math.max(1, Math.floor(count)) || 1
+                        )
+                      )
+                    }
+                    className="w-16 rounded-md border border-canvas-border px-1.5 py-1 text-xs outline-none ring-accent focus:ring-2"
+                  />
+                </label>
+                <label className="flex items-center gap-1 text-[11px] text-ink-muted">
                   <input
                     type="checkbox"
                     checked={editPrintablePattern}
                     onChange={(e) => setEditPrintablePattern(e.target.checked)}
                   />
                   保持平面可打印图案
+                </label>
+                <label className="flex items-center gap-1 text-[11px] text-ink-muted">
+                  <input
+                    type="checkbox"
+                    checked={editSeparateOutputs}
+                    onChange={(e) => {
+                      const checked = e.target.checked;
+                      setEditSeparateOutputs(checked);
+                      if (!checked) setEditImageCount((count) => Math.min(10, count));
+                    }}
+                  />
+                  每个图案单独成一张图片
                 </label>
                 <button
                   type="button"

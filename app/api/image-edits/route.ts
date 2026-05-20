@@ -23,6 +23,7 @@ type Body = {
   aspect_ratio?: string;
   resolution?: string;
   printable_pattern?: boolean;
+  separate_outputs?: boolean;
 };
 
 export async function POST(request: Request) {
@@ -57,7 +58,11 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "模型不可用或未找到" }, { status: 400 });
   }
 
-  const imageCount = Math.min(10, Math.max(1, Math.floor(body.image_count ?? 1)));
+  const separateOutputs = Boolean(body.separate_outputs);
+  const imageCount = Math.min(
+    separateOutputs ? 24 : 10,
+    Math.max(1, Math.floor(body.image_count ?? 1))
+  );
   const aspect = body.aspect_ratio ?? "auto";
   if (!ASPECTS.has(aspect)) {
     return NextResponse.json({ error: "无效的 aspect_ratio" }, { status: 400 });
@@ -81,6 +86,7 @@ export async function POST(request: Request) {
     const fullPrompt = buildImageEditPrompt({
       userPrompt: body.prompt.trim(),
       printablePattern: Boolean(body.printable_pattern),
+      separateOutputs,
       variantIndex: i,
       variantTotal: imageCount,
     });

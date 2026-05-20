@@ -235,10 +235,17 @@ export function buildPatternDesignPrompt(params: {
 export function buildImageEditPrompt(params: {
   userPrompt: string;
   printablePattern: boolean;
+  separateOutputs: boolean;
   variantIndex: number;
   variantTotal: number;
 }): string {
-  const { userPrompt, printablePattern, variantIndex, variantTotal } = params;
+  const {
+    userPrompt,
+    printablePattern,
+    separateOutputs,
+    variantIndex,
+    variantTotal,
+  } = params;
   const baseBlock =
     `[Image edit source]\n` +
     `Image 1 is the current generated image to continue editing. Apply the user's requested change to this image while preserving all unrelated details, composition, subject identity, layout, and visual style.\n`;
@@ -249,10 +256,21 @@ export function buildImageEditPrompt(params: {
     : `[Edit constraints]\n` +
       `Make only the requested modification. Do not unexpectedly change product shape, camera angle, lighting, background, text, or decorative elements that the user did not ask to change.\n`;
 
-  const varBlock =
-    variantTotal > 1
-      ? `\n[Variation]\nThis is edited version ${variantIndex + 1} of ${variantTotal}. Keep the same requested edit but provide a meaningfully distinct option.\n`
+  const separationBlock =
+    separateOutputs && variantTotal > 1
+      ? `[Separate single-design output]\n` +
+        `Create exactly one standalone output image: item ${variantIndex + 1} of ${variantTotal}.\n` +
+        `If the source image or request contains multiple motifs, months, names, flowers, labels, panels, or options, do not combine them into one grid or sheet. Focus only on the ${variantIndex + 1} item, keep it centered, and leave clean margins.\n`
       : "";
 
-  return `${baseBlock}\n${outputBlock}${varBlock}\n[Continue editing request]\n${userPrompt.trim()}`;
+  const varBlock =
+    variantTotal > 1
+      ? `\n[Variation]\nThis is edited version ${variantIndex + 1} of ${variantTotal}. ${
+          separateOutputs
+            ? "It should be a separate standalone image, not a combined sheet."
+            : "Keep the same requested edit but provide a meaningfully distinct option."
+        }\n`
+      : "";
+
+  return `${baseBlock}\n${outputBlock}${separationBlock}${varBlock}\n[Continue editing request]\n${userPrompt.trim()}`;
 }
