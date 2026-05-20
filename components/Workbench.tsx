@@ -184,6 +184,8 @@ export default function Workbench() {
   const dragDepthRefRef = useRef(0);
   const lastDropProductRef = useRef(0);
   const lastDropRefRef = useRef(0);
+  const printPanelRef = useRef<HTMLDivElement>(null);
+  const editPanelRef = useRef<HTMLDivElement>(null);
 
   batchOutputsRef.current = batchOutputs;
   const batchOutputCount = batchOutputs?.length ?? 0;
@@ -394,10 +396,14 @@ export default function Workbench() {
   };
 
   const selectPrintSource = (url: string) => {
+    setToolMode("product_concept");
     setPrintSourceUrl(url);
     setPrintJob(null);
     setError(null);
-    setDownloadMessage(null);
+    setDownloadMessage("已选择打印图案，请在结果区点击“生成打印版”。");
+    window.requestAnimationFrame(() => {
+      printPanelRef.current?.scrollIntoView({ behavior: "smooth", block: "center" });
+    });
   };
 
   const selectEditSource = (url: string, printablePattern = false) => {
@@ -408,6 +414,9 @@ export default function Workbench() {
     setEditSeparateOutputs(false);
     setError(null);
     setDownloadMessage(null);
+    window.requestAnimationFrame(() => {
+      editPanelRef.current?.scrollIntoView({ behavior: "smooth", block: "center" });
+    });
   };
 
   const startPrintAsset = async () => {
@@ -1223,7 +1232,10 @@ export default function Workbench() {
                 {downloadMessage}
               </p>
             )}
-            <div className="mt-3 rounded-lg border border-canvas-border bg-canvas-muted/40 p-3">
+            <div
+              ref={printPanelRef}
+              className="mt-3 rounded-lg border border-canvas-border bg-canvas-muted/40 p-3"
+            >
               <div className="flex flex-wrap items-center justify-between gap-2">
                 <div>
                   <h3 className="text-xs font-semibold text-ink">
@@ -1329,7 +1341,7 @@ export default function Workbench() {
                 </>
               )}
             </div>
-            <div className="mt-3 rounded-lg border border-canvas-border bg-white p-3">
+            <div ref={editPanelRef} className="mt-3 rounded-lg border border-canvas-border bg-white p-3">
               <div className="flex flex-wrap items-center justify-between gap-2">
                 <div>
                   <h3 className="text-xs font-semibold text-ink">继续修改</h3>
