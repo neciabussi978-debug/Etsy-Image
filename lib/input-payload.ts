@@ -140,12 +140,24 @@ export function buildConceptPrompt(params: {
       ? `[Edit mode]\nFull product concept redesign is allowed. You may reinterpret silhouette, materials, and styling, but keep the user's product category and any critical product identity from the reference images.\n`
       : `[Edit mode]\nPattern replacement only. Keep the product structure, silhouette, material, proportions, and camera logic consistent; change only the requested surface graphic, print, logo, colorway, or decorative treatment.\n`;
 
+  const placementBlock =
+    editMode === "pattern_replace"
+      ? `[Surface artwork placement rules]\n` +
+        `- Treat each visible product face as a real printing area, not as a loose sticker.\n` +
+        `- Place the artwork centered on the intended front-facing surface panel.\n` +
+        `- Keep text, logos, flowers, illustrations, and baselines visually upright and level.\n` +
+        `- Align the artwork with the product's top rim, bottom edge, label area, or natural horizontal axis.\n` +
+        `- If the surface is curved or slightly angled, conform subtly to the product perspective while keeping the design itself straight and readable.\n` +
+        `- Do not rotate, skew, slant, or randomly tilt the artwork unless the user explicitly asks for a tilted design.\n`
+      : `[Surface artwork placement rules]\n` +
+        `When applying any graphic or label to the redesigned product, keep the artwork intentional, readable, centered, and aligned to the product's natural front face.\n`;
+
   const varBlock =
     variantTotal > 1
       ? `\n[Variation]\nThis is concept ${variantIndex + 1} of ${variantTotal}. Make it meaningfully different while respecting the same product concept request.\n`
       : "";
 
-  return `${roleBlock}\n${modeBlock}${varBlock}\n[Concept change request]\n${userPrompt.trim()}`;
+  return `${roleBlock}\n${modeBlock}${placementBlock}${varBlock}\n[Concept change request]\n${userPrompt.trim()}`;
 }
 
 export const buildAugmentedPrompt = buildConceptPrompt;
