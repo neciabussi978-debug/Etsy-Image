@@ -547,7 +547,7 @@ export default function Workbench() {
       );
       return;
     }
-    const n = Math.min(10, Math.max(1, Math.floor(imageCount)));
+    const n = Math.min(maxBatchCount, Math.max(1, Math.floor(imageCount)));
     setBusy(true);
     setBatchOutputs(null);
     try {
