@@ -24,8 +24,11 @@ The final output must be a clean production layout, not a lifestyle mockup:
 - Deskew and straighten every extracted design.
 - Make every design perfectly front-facing, upright, and vertical.
 - Do not preserve the original rotation, camera angle, or perspective tilt.
+- Preserve each extracted artwork's original proportions and bounding-box aspect ratio.
+- Do not stretch, squash, widen, narrow, or force any design to fill a square frame.
+- If the printed artwork came from a planter, mug, tag, bookmark, sticker, label, or packaging face, keep the artwork's relative height, width, spacing, and subject scale while removing only the product surface and perspective.
 - Arrange designs in a precise grid. For four designs, use a 2 by 2 grid.
-- Give every design the same scale, same bounding-box size, same orientation, and even margins.
+- Give every design a consistent visual scale, same orientation, and even margins, but use whitespace instead of distorting individual designs to make boxes match.
 - Align edges and baselines cleanly; no design should lean left or right.
 - Keep every design fully visible and uncropped.
 

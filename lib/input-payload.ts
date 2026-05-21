@@ -212,6 +212,9 @@ export function buildPatternDesignPrompt(params: {
     `Create a modified print-ready design pattern, not a product mockup or lifestyle photo.\n` +
     `- Output flat 2D artwork on a clean plain white or transparent-looking white background.\n` +
     `- Preserve the important subjects, linework, typography, colors, and decorative style from the reference unless the user asks to change them.\n` +
+    `- Preserve the original artwork proportions and bounding-box aspect ratio from the reference. Do not stretch, squash, widen, narrow, or resize one axis independently to fill the canvas.\n` +
+    `- If extracting artwork from a product surface such as a planter, mug, tag, bookmark, sticker, label, or packaging face, treat the visible printed artwork as the source design. Flatten and deskew it, but keep its original relative height, width, spacing, and subject scale.\n` +
+    `- When multiple extracted designs appear in one output, keep each design's own proportions intact. Use margins or whitespace instead of distorting the design to make boxes match.\n` +
     `- Apply the user's requested edits directly to the design artwork.\n` +
     `- Keep all text readable, upright, and level.\n` +
     `- Keep logos, flowers, illustrations, icons, and borders centered, aligned, and evenly spaced.\n` +
@@ -264,7 +267,8 @@ export function buildImageEditPrompt(params: {
 
   const outputBlock = printablePattern
     ? `[Printable pattern constraints]\n` +
-      `Keep the result as flat 2D print-ready artwork. Use a clean white or transparent-looking background, keep text upright and readable, preserve crisp linework, and do not turn the design into a product mockup or lifestyle scene.\n`
+      `Keep the result as flat 2D print-ready artwork. Use a clean white or transparent-looking background, keep text upright and readable, preserve crisp linework, and do not turn the design into a product mockup or lifestyle scene.\n` +
+      `Preserve the source artwork's proportions and bounding-box aspect ratio. Flatten or deskew perspective, but do not stretch, squash, widen, narrow, or force the design to fill a square canvas. Use whitespace when needed.\n`
     : `[Edit constraints]\n` +
       `Make only the requested modification. Do not unexpectedly change product shape, camera angle, lighting, background, text, or decorative elements that the user did not ask to change.\n`;
 
