@@ -16,6 +16,12 @@ type Body = {
 
 const PRINT_PROMPT = `Create a print-ready flat artwork sheet extracted from the supplied product concept image.
 
+FAITHFUL EXTRACTION, NOT REDESIGN:
+- Copy the visible surface artwork as faithfully as possible. Do not create a new design and do not reinterpret the theme.
+- Preserve the exact visible motif identity: same flower species, petal shapes, leaf shapes, stems, icon arrangement, line style, color placement, composition, and decorative details.
+- Do not substitute generic flowers, new bouquet compositions, clipart-style alternatives, or a cleaner imagined version of the artwork.
+- If details are unclear, approximate the visible source shapes conservatively instead of inventing missing elements.
+
 SURFACE-ARTWORK TARGET ONLY:
 - Extract only the 2D artwork printed, painted, engraved, labeled, or decorated on the product surface.
 - For planters, pots, mugs, cups, jars, boxes, tags, labels, and packaging, the target is the graphic on the visible front/side surface of the container itself.

@@ -209,6 +209,11 @@ export function buildPatternDesignPrompt(params: {
 
   const productionBlock =
     `[Printable pattern output]\n` +
+    `[Faithful extraction, not redesign]\n` +
+    `- If the user asks to extract, copy, isolate, separate, or make a printable version of a reference design, do not create a new design and do not reinterpret the theme.\n` +
+    `- Preserve the exact visible motif identity from the reference: same flower species, petal shapes, leaf shapes, stems, icon arrangement, line style, color placement, composition, and decorative details.\n` +
+    `- Do not substitute generic flowers, new bouquet compositions, clipart-style alternatives, or a cleaner imagined version of the artwork.\n` +
+    `- If details are unclear, approximate the visible source shapes conservatively instead of inventing missing elements.\n\n` +
     `[Surface-artwork target only]\n` +
     `- Extract or modify only the 2D artwork printed, painted, engraved, labeled, or decorated on the product surface.\n` +
     `- For planters, pots, mugs, cups, jars, boxes, tags, labels, and packaging, the target is the graphic on the visible front/side surface of the container itself.\n` +
@@ -222,7 +227,7 @@ export function buildPatternDesignPrompt(params: {
     `- Flatten perspective by rectifying the surface, but after rectification preserve the source artwork's proportions, spacing, and subject scale.\n\n` +
     `Create a modified print-ready design pattern, not a product mockup or lifestyle photo.\n` +
     `- Output flat 2D artwork on a clean plain white or transparent-looking white background.\n` +
-    `- Preserve the important subjects, linework, typography, colors, and decorative style from the reference unless the user asks to change them.\n` +
+    `- Preserve the important subjects, linework, typography, colors, composition, and decorative style from the reference unless the user explicitly asks to change them.\n` +
     `- If extracting artwork from a product surface such as a planter, mug, tag, bookmark, sticker, label, or packaging face, treat the visible printed artwork as the source design. Flatten and deskew it, but keep its original relative height, width, spacing, and subject scale.\n` +
     `- Apply the user's requested edits directly to the design artwork.\n` +
     `- Keep all text readable, upright, and level.\n` +
