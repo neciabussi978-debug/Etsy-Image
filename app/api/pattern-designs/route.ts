@@ -14,6 +14,8 @@ export const dynamic = "force-dynamic";
 
 const ASPECTS = new Set(["auto", "1:1", "9:16", "16:9", "4:3", "3:4"]);
 const RESOLUTIONS = new Set(["1K", "2K", "4K"]);
+const MAX_BATCH = 24;
+const MAX_PATTERNS_PER_IMAGE = 24;
 
 type Body = {
   modelId?: string;
@@ -22,6 +24,7 @@ type Body = {
   image_count?: number;
   aspect_ratio?: string;
   resolution?: string;
+  patterns_per_image?: number;
   separate_outputs?: boolean;
 };
 
@@ -83,7 +86,13 @@ export async function POST(request: Request) {
     );
   }
 
-  const imageCount = Math.min(24, Math.max(1, Math.floor(body.image_count ?? 1)));
+  const imageCount = Math.min(MAX_BATCH, Math.max(1, Math.floor(body.image_count ?? 1)));
+  const patternsPerImage = Boolean(body.separate_outputs)
+    ? 1
+    : Math.min(
+        MAX_PATTERNS_PER_IMAGE,
+        Math.max(1, Math.floor(body.patterns_per_image ?? 1))
+      );
   const aspect = body.aspect_ratio ?? "1:1";
   if (!ASPECTS.has(aspect)) {
     return NextResponse.json({ error: "无效的 aspect_ratio" }, { status: 400 });
@@ -109,6 +118,7 @@ export async function POST(request: Request) {
       patternCount: patternUrls.length,
       variantIndex: i,
       variantTotal: imageCount,
+      patternsPerImage,
       separateOutputs: Boolean(body.separate_outputs),
     });
 

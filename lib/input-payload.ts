@@ -185,6 +185,7 @@ export function buildPatternDesignPrompt(params: {
   patternCount: number;
   variantIndex: number;
   variantTotal: number;
+  patternsPerImage?: number;
   separateOutputs?: boolean;
 }): string {
   const {
@@ -192,9 +193,14 @@ export function buildPatternDesignPrompt(params: {
     patternCount,
     variantIndex,
     variantTotal,
+    patternsPerImage = 1,
     separateOutputs = false,
   } = params;
   const pc = Math.max(0, patternCount);
+  const itemCount = separateOutputs ? 1 : Math.max(1, Math.floor(patternsPerImage));
+  const itemStart = variantIndex * itemCount + 1;
+  const itemEnd = itemStart + itemCount - 1;
+  const logicalTotal = Math.max(1, variantTotal) * itemCount;
   const roleBlock =
     `[Image roles - order matches the model image input exactly]\n` +
     (pc > 0
@@ -213,29 +219,30 @@ export function buildPatternDesignPrompt(params: {
     `- Do not place the design on cups, shirts, packaging, signs, posters in rooms, or any physical object.\n` +
     `- Make the result suitable for direct printing, cutting, sublimation, sticker production, or proofing.\n`;
 
-  const separationBlock =
-    separateOutputs && variantTotal > 1
-      ? `[Separate single-design output]\n` +
-        `Create exactly one standalone printable design in this image: item ${variantIndex + 1} of ${variantTotal}.\n` +
-        `If the reference or request contains multiple motifs, months, names, flowers, characters, or options, do not combine them into a grid or sheet. Focus only on the ${variantIndex + 1} item and leave generous clean margins.\n`
+  const layoutBlock =
+    variantTotal > 1 || itemCount > 1
+      ? `[Output grouping]\n` +
+        `This is output image ${variantIndex + 1} of ${variantTotal}.\n` +
+        `Create exactly ${itemCount} distinct printable design${itemCount > 1 ? "s" : ""} in this image, covering logical item${itemCount > 1 ? "s" : ""} ${itemStart}${itemCount > 1 ? ` through ${itemEnd}` : ""} of ${logicalTotal}.\n` +
+        (itemCount > 1
+          ? `Arrange the ${itemCount} designs in a tidy, front-facing grid or evenly spaced rows/columns on one clean canvas. Keep every design upright, separated, similarly sized, uncropped, and ready to export.\n`
+          : `Make this image one standalone file-style artwork, not a combined sheet.\n`) +
+        `If the request implies an ordered series such as months, alphabet letters, names, flowers, stickers, or logo options, use the matching consecutive items for this output image only.\n`
       : "";
 
   const varBlock =
     variantTotal > 1
-      ? `\n[Variation]\nThis is printable design ${variantIndex + 1} of ${variantTotal}. ${
-          separateOutputs
-            ? "It should be a separate standalone file-style artwork, not a combined sheet."
-            : "Make it meaningfully different while respecting the same request."
-        }\n`
+      ? `\n[Variation]\nRespect the same design request, but generate only the assigned grouped item range for this output image.\n`
       : "";
 
-  return `${roleBlock}\n${productionBlock}${separationBlock}${varBlock}\n[Design modification request]\n${userPrompt.trim()}`;
+  return `${roleBlock}\n${productionBlock}${layoutBlock}${varBlock}\n[Design modification request]\n${userPrompt.trim()}`;
 }
 
 export function buildImageEditPrompt(params: {
   userPrompt: string;
   printablePattern: boolean;
   separateOutputs: boolean;
+  patternsPerImage?: number;
   variantIndex: number;
   variantTotal: number;
 }): string {
@@ -243,9 +250,14 @@ export function buildImageEditPrompt(params: {
     userPrompt,
     printablePattern,
     separateOutputs,
+    patternsPerImage = 1,
     variantIndex,
     variantTotal,
   } = params;
+  const itemCount = separateOutputs ? 1 : Math.max(1, Math.floor(patternsPerImage));
+  const itemStart = variantIndex * itemCount + 1;
+  const itemEnd = itemStart + itemCount - 1;
+  const logicalTotal = Math.max(1, variantTotal) * itemCount;
   const baseBlock =
     `[Image edit source]\n` +
     `Image 1 is the current generated image to continue editing. Apply the user's requested change to this image while preserving all unrelated details, composition, subject identity, layout, and visual style.\n`;
@@ -256,21 +268,21 @@ export function buildImageEditPrompt(params: {
     : `[Edit constraints]\n` +
       `Make only the requested modification. Do not unexpectedly change product shape, camera angle, lighting, background, text, or decorative elements that the user did not ask to change.\n`;
 
-  const separationBlock =
-    separateOutputs && variantTotal > 1
-      ? `[Separate single-design output]\n` +
-        `Create exactly one standalone output image: item ${variantIndex + 1} of ${variantTotal}.\n` +
-        `If the source image or request contains multiple motifs, months, names, flowers, labels, panels, or options, do not combine them into one grid or sheet. Focus only on the ${variantIndex + 1} item, keep it centered, and leave clean margins.\n`
+  const layoutBlock =
+    variantTotal > 1 || itemCount > 1
+      ? `[Output grouping]\n` +
+        `This is output image ${variantIndex + 1} of ${variantTotal}.\n` +
+        `Create exactly ${itemCount} distinct output design${itemCount > 1 ? "s" : ""} in this image, covering logical item${itemCount > 1 ? "s" : ""} ${itemStart}${itemCount > 1 ? ` through ${itemEnd}` : ""} of ${logicalTotal}.\n` +
+        (itemCount > 1
+          ? `Arrange the ${itemCount} designs neatly on one canvas with even spacing, consistent scale, upright orientation, clean margins, and no overlaps.\n`
+          : `Make this image one standalone file-style artwork, not a combined sheet.\n`) +
+        `If the request implies an ordered series such as months, alphabet letters, names, flowers, labels, panels, or options, use the matching consecutive items for this output image only.\n`
       : "";
 
   const varBlock =
     variantTotal > 1
-      ? `\n[Variation]\nThis is edited version ${variantIndex + 1} of ${variantTotal}. ${
-          separateOutputs
-            ? "It should be a separate standalone image, not a combined sheet."
-            : "Keep the same requested edit but provide a meaningfully distinct option."
-        }\n`
+      ? `\n[Variation]\nRespect the same edit request, but generate only the assigned grouped item range for this output image.\n`
       : "";
 
-  return `${baseBlock}\n${outputBlock}${separationBlock}${varBlock}\n[Continue editing request]\n${userPrompt.trim()}`;
+  return `${baseBlock}\n${outputBlock}${layoutBlock}${varBlock}\n[Continue editing request]\n${userPrompt.trim()}`;
 }

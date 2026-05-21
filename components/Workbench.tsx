@@ -78,6 +78,7 @@ const RES_OPTIONS = ["1K", "2K", "4K"] as const;
 const POLL_MS = 3000;
 const TIMEOUT_MS = 15 * 60 * 1000;
 const FAILED_HISTORY_REFRESH_MS = 60 * 1000;
+const MAX_PATTERN_ITEMS_PER_IMAGE = 24;
 
 function parseResultUrls(raw: string | null): string[] {
   if (!raw) return [];
@@ -173,8 +174,8 @@ export default function Workbench() {
   const [editPrintablePattern, setEditPrintablePattern] = useState(false);
   const [editBusy, setEditBusy] = useState(false);
   const [editImageCount, setEditImageCount] = useState(1);
-  const [editSeparateOutputs, setEditSeparateOutputs] = useState(false);
-  const [separatePatternOutputs, setSeparatePatternOutputs] = useState(false);
+  const [editItemsPerImage, setEditItemsPerImage] = useState(1);
+  const [patternItemsPerImage, setPatternItemsPerImage] = useState(1);
   const [history, setHistory] = useState<Generation[]>([]);
   const pollStartRef = useRef<number | null>(null);
   const batchOutputsRef = useRef<BatchOutputItem[] | null>(null);
@@ -411,7 +412,7 @@ export default function Workbench() {
     setEditPrintablePattern(printablePattern);
     setEditPrompt("");
     setEditImageCount(1);
-    setEditSeparateOutputs(false);
+    setEditItemsPerImage(1);
     setError(null);
     setDownloadMessage(null);
     window.requestAnimationFrame(() => {
@@ -476,8 +477,11 @@ export default function Workbench() {
       return;
     }
 
-    const editMax = editSeparateOutputs ? 24 : 10;
-    const n = Math.min(editMax, Math.max(1, Math.floor(editImageCount)));
+    const n = Math.min(24, Math.max(1, Math.floor(editImageCount)));
+    const perImage = Math.min(
+      MAX_PATTERN_ITEMS_PER_IMAGE,
+      Math.max(1, Math.floor(editItemsPerImage))
+    );
     setEditBusy(true);
     setBatchOutputs(null);
     try {
@@ -492,7 +496,7 @@ export default function Workbench() {
           aspect_ratio: aspect,
           resolution,
           printable_pattern: editPrintablePattern,
-          separate_outputs: editSeparateOutputs,
+          patterns_per_image: perImage,
         }),
       });
       const j = (await r.json()) as {
@@ -548,6 +552,10 @@ export default function Workbench() {
       return;
     }
     const n = Math.min(maxBatchCount, Math.max(1, Math.floor(imageCount)));
+    const perImage = Math.min(
+      MAX_PATTERN_ITEMS_PER_IMAGE,
+      Math.max(1, Math.floor(patternItemsPerImage))
+    );
     setBusy(true);
     setBatchOutputs(null);
     try {
@@ -563,7 +571,7 @@ export default function Workbench() {
                 image_count: n,
                 aspect_ratio: aspect,
                 resolution,
-                separate_outputs: separatePatternOutputs,
+                patterns_per_image: perImage,
               }
             : {
                 modelId,
@@ -1128,7 +1136,7 @@ export default function Workbench() {
             <label className="mt-3 text-xs font-medium text-ink-muted">生成数量</label>
             <p className="mt-0.5 text-[10px] text-ink-faint">
               {isPatternDesign
-                ? "将输出可直接打印的平面设计图案；每张 1 次调用，最多 24。"
+                ? "这里是要生成多少张图片；每张 1 次调用，最多 24。"
                 : "将按顺序创建多个独立 Kie 任务（每张 1 次调用），最多 10。"}
             </p>
             <input
@@ -1149,18 +1157,32 @@ export default function Workbench() {
               className="mt-1 w-28 rounded-md border border-canvas-border px-2 py-2 text-sm outline-none ring-accent focus:ring-2"
             />
             {isPatternDesign && (
-              <label className="mt-3 flex items-start gap-2 rounded-lg border border-canvas-border bg-canvas-muted/40 p-2 text-xs text-ink-muted">
+              <div className="mt-3 rounded-lg border border-canvas-border bg-canvas-muted/40 p-2">
+                <label className="text-xs font-medium text-ink-muted">每张图包含的图案数量</label>
                 <input
-                  type="checkbox"
-                  checked={separatePatternOutputs}
-                  onChange={(e) => setSeparatePatternOutputs(e.target.checked)}
-                  className="mt-0.5"
+                  type="number"
+                  min={1}
+                  max={MAX_PATTERN_ITEMS_PER_IMAGE}
+                  value={patternItemsPerImage}
+                  onChange={(e) => {
+                    const v = Number(e.target.value);
+                    if (!Number.isFinite(v)) return;
+                    setPatternItemsPerImage(
+                      Math.min(MAX_PATTERN_ITEMS_PER_IMAGE, Math.max(1, Math.floor(v)))
+                    );
+                  }}
+                  onBlur={() =>
+                    setPatternItemsPerImage((count) =>
+                      Math.min(MAX_PATTERN_ITEMS_PER_IMAGE, Math.max(1, Math.floor(count)) || 1)
+                    )
+                  }
+                  className="mt-1 w-28 rounded-md border border-canvas-border bg-white px-2 py-2 text-sm outline-none ring-accent focus:ring-2"
                 />
-                <span>
-                  每个图案单独成一张图片。适合 12 个月份生日花、系列贴纸、多个 logo
-                  方案等；生成数量就是要拆出的单图数量。
-                </span>
-              </label>
+                <p className="mt-1 text-[11px] leading-snug text-ink-faint">
+                  总计规划 {imageCount * patternItemsPerImage} 个图案。例如：生成 4 张、每张 3
+                  个，就会按顺序拆成 12 个图案。
+                </p>
+              </div>
             )}
             <div className="mt-4 grid grid-cols-2 gap-3">
               <div>
@@ -1367,25 +1389,42 @@ export default function Workbench() {
               />
               <div className="mt-2 flex flex-wrap items-center gap-2">
                 <label className="flex items-center gap-1 text-[11px] text-ink-muted">
-                  <span>生成数量</span>
+                  <span>生成图片张数</span>
                   <input
                     type="number"
                     min={1}
-                    max={editSeparateOutputs ? 24 : 10}
+                    max={24}
                     value={editImageCount}
                     onChange={(e) => {
                       const v = Number(e.target.value);
                       if (!Number.isFinite(v)) return;
-                      setEditImageCount(
-                        Math.min(editSeparateOutputs ? 24 : 10, Math.max(1, Math.floor(v)))
-                      );
+                      setEditImageCount(Math.min(24, Math.max(1, Math.floor(v))));
                     }}
                     onBlur={() =>
                       setEditImageCount((count) =>
-                        Math.min(
-                          editSeparateOutputs ? 24 : 10,
-                          Math.max(1, Math.floor(count)) || 1
-                        )
+                        Math.min(24, Math.max(1, Math.floor(count)) || 1)
+                      )
+                    }
+                    className="w-16 rounded-md border border-canvas-border px-1.5 py-1 text-xs outline-none ring-accent focus:ring-2"
+                  />
+                </label>
+                <label className="flex items-center gap-1 text-[11px] text-ink-muted">
+                  <span>每张图案数</span>
+                  <input
+                    type="number"
+                    min={1}
+                    max={MAX_PATTERN_ITEMS_PER_IMAGE}
+                    value={editItemsPerImage}
+                    onChange={(e) => {
+                      const v = Number(e.target.value);
+                      if (!Number.isFinite(v)) return;
+                      setEditItemsPerImage(
+                        Math.min(MAX_PATTERN_ITEMS_PER_IMAGE, Math.max(1, Math.floor(v)))
+                      );
+                    }}
+                    onBlur={() =>
+                      setEditItemsPerImage((count) =>
+                        Math.min(MAX_PATTERN_ITEMS_PER_IMAGE, Math.max(1, Math.floor(count)) || 1)
                       )
                     }
                     className="w-16 rounded-md border border-canvas-border px-1.5 py-1 text-xs outline-none ring-accent focus:ring-2"
@@ -1398,18 +1437,6 @@ export default function Workbench() {
                     onChange={(e) => setEditPrintablePattern(e.target.checked)}
                   />
                   保持平面可打印图案
-                </label>
-                <label className="flex items-center gap-1 text-[11px] text-ink-muted">
-                  <input
-                    type="checkbox"
-                    checked={editSeparateOutputs}
-                    onChange={(e) => {
-                      const checked = e.target.checked;
-                      setEditSeparateOutputs(checked);
-                      if (!checked) setEditImageCount((count) => Math.min(10, count));
-                    }}
-                  />
-                  每个图案单独成一张图片
                 </label>
                 <button
                   type="button"
