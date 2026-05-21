@@ -209,6 +209,11 @@ export function buildPatternDesignPrompt(params: {
 
   const productionBlock =
     `[Printable pattern output]\n` +
+    `[Surface-artwork target only]\n` +
+    `- Extract or modify only the 2D artwork printed, painted, engraved, labeled, or decorated on the product surface.\n` +
+    `- For planters, pots, mugs, cups, jars, boxes, tags, labels, and packaging, the target is the graphic on the visible front/side surface of the container itself.\n` +
+    `- Do not extract real objects or product contents: ignore flowers/plants growing out of a planter, stems, leaves, soil, pebbles, filler, handles, props, background decorations, and loose objects around the product.\n` +
+    `- If the image shows both physical flowers/plants and flower artwork printed on the container, use only the printed flower artwork on the container surface.\n\n` +
     `[Non-negotiable proportion lock]\n` +
     `- Each extracted artwork must keep the same width-to-height ratio it has in the reference image or on the product surface.\n` +
     `- Use uniform scaling only: X scale and Y scale must be identical. Never resize one axis independently.\n` +
@@ -271,6 +276,8 @@ export function buildImageEditPrompt(params: {
 
   const outputBlock = printablePattern
     ? `[Printable pattern constraints]\n` +
+      `[Surface-artwork target only]\n` +
+      `Extract or modify only the 2D artwork printed, painted, engraved, labeled, or decorated on the product surface. Ignore real objects and product contents such as flowers/plants growing out of a planter, stems, leaves, soil, pebbles, filler, props, and background decorations. If both real flowers/plants and printed flower artwork are visible, use only the printed flower artwork on the container surface.\n` +
       `[Non-negotiable proportion lock]\n` +
       `Each extracted artwork must keep the same width-to-height ratio it has in the source image. Use uniform scaling only: X scale and Y scale must be identical. Never stretch, squash, widen, narrow, compress, expand, normalize, or reshape the artwork to fit a square canvas or matching box. Use whitespace instead of distortion.\n` +
       `Keep the result as flat 2D print-ready artwork. Use a clean white or transparent-looking background, keep text upright and readable, preserve crisp linework, and do not turn the design into a product mockup or lifestyle scene.\n` +

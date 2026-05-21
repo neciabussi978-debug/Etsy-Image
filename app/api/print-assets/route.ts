@@ -16,6 +16,12 @@ type Body = {
 
 const PRINT_PROMPT = `Create a print-ready flat artwork sheet extracted from the supplied product concept image.
 
+SURFACE-ARTWORK TARGET ONLY:
+- Extract only the 2D artwork printed, painted, engraved, labeled, or decorated on the product surface.
+- For planters, pots, mugs, cups, jars, boxes, tags, labels, and packaging, the target is the graphic on the visible front/side surface of the container itself.
+- Do not extract real objects or product contents: ignore flowers/plants growing out of a planter, stems, leaves, soil, pebbles, filler, handles, props, background decorations, and loose objects sitting around the product.
+- If the image shows both physical flowers/plants and flower artwork printed on the container, extract only the printed flower artwork on the container surface.
+
 NON-NEGOTIABLE PROPORTION LOCK:
 - Each extracted artwork must keep the same width-to-height ratio as it has on the product surface in the input image.
 - Use uniform scaling only. The X scale and Y scale must be identical for every extracted design.
