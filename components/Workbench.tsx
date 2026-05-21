@@ -1182,6 +1182,12 @@ export default function Workbench() {
                   总计规划 {imageCount * patternItemsPerImage} 个图案。例如：生成 4 张、每张 3
                   个，就会按顺序拆成 12 个图案。
                 </p>
+                {patternItemsPerImage > 1 && (
+                  <p className="mt-1 rounded-md bg-amber-50 px-2 py-1 text-[11px] leading-snug text-amber-700">
+                    多图同页会交给生图模型重新排版，比例仍可能漂移；如果必须保持和原图案完全一致，建议设为每张
+                    1 个图案，再分别下载。
+                  </p>
+                )}
               </div>
             )}
             <div className="mt-4 grid grid-cols-2 gap-3">
