@@ -16,6 +16,13 @@ type Body = {
 
 const PRINT_PROMPT = `Create a print-ready flat artwork sheet extracted from the supplied product concept image.
 
+NON-NEGOTIABLE PROPORTION LOCK:
+- Each extracted artwork must keep the same width-to-height ratio as it has on the product surface in the input image.
+- Use uniform scaling only. The X scale and Y scale must be identical for every extracted design.
+- Never stretch, squash, widen, narrow, compress, expand, normalize, or reshape any artwork to fit a grid cell or square canvas.
+- If a design does not fill its grid cell, leave whitespace around it. Whitespace is correct; distortion is wrong.
+- Flatten perspective by rectifying the surface, but after rectification preserve the artwork's original proportions, spacing, and subject scale.
+
 Use the input image only as a reference for the decorative artwork, illustration, logo, motif, texture, or surface print. Remove the product mockup, product silhouette, perspective, shadows, background props, tags, hands, table surface, and any photography artifacts.
 
 If the source image contains multiple distinct product patterns or motifs, extract each one as a separate printable design. For example, if there are four bookmark designs, create four separate flat artwork panels in one output image.
@@ -24,11 +31,9 @@ The final output must be a clean production layout, not a lifestyle mockup:
 - Deskew and straighten every extracted design.
 - Make every design perfectly front-facing, upright, and vertical.
 - Do not preserve the original rotation, camera angle, or perspective tilt.
-- Preserve each extracted artwork's original proportions and bounding-box aspect ratio.
-- Do not stretch, squash, widen, narrow, or force any design to fill a square frame.
 - If the printed artwork came from a planter, mug, tag, bookmark, sticker, label, or packaging face, keep the artwork's relative height, width, spacing, and subject scale while removing only the product surface and perspective.
 - Arrange designs in a precise grid. For four designs, use a 2 by 2 grid.
-- Give every design a consistent visual scale, same orientation, and even margins, but use whitespace instead of distorting individual designs to make boxes match.
+- Keep the same orientation and even margins, but use whitespace instead of distorting individual designs to make boxes match.
 - Align edges and baselines cleanly; no design should lean left or right.
 - Keep every design fully visible and uncropped.
 

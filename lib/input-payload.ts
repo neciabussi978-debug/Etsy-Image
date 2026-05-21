@@ -209,12 +209,16 @@ export function buildPatternDesignPrompt(params: {
 
   const productionBlock =
     `[Printable pattern output]\n` +
+    `[Non-negotiable proportion lock]\n` +
+    `- Each extracted artwork must keep the same width-to-height ratio it has in the reference image or on the product surface.\n` +
+    `- Use uniform scaling only: X scale and Y scale must be identical. Never resize one axis independently.\n` +
+    `- Do not stretch, squash, widen, narrow, compress, expand, normalize, or reshape any design to fit a grid cell, square canvas, or matching box.\n` +
+    `- If the artwork does not fill its available area, leave whitespace around it. Whitespace is correct; distortion is wrong.\n` +
+    `- Flatten perspective by rectifying the surface, but after rectification preserve the source artwork's proportions, spacing, and subject scale.\n\n` +
     `Create a modified print-ready design pattern, not a product mockup or lifestyle photo.\n` +
     `- Output flat 2D artwork on a clean plain white or transparent-looking white background.\n` +
     `- Preserve the important subjects, linework, typography, colors, and decorative style from the reference unless the user asks to change them.\n` +
-    `- Preserve the original artwork proportions and bounding-box aspect ratio from the reference. Do not stretch, squash, widen, narrow, or resize one axis independently to fill the canvas.\n` +
     `- If extracting artwork from a product surface such as a planter, mug, tag, bookmark, sticker, label, or packaging face, treat the visible printed artwork as the source design. Flatten and deskew it, but keep its original relative height, width, spacing, and subject scale.\n` +
-    `- When multiple extracted designs appear in one output, keep each design's own proportions intact. Use margins or whitespace instead of distorting the design to make boxes match.\n` +
     `- Apply the user's requested edits directly to the design artwork.\n` +
     `- Keep all text readable, upright, and level.\n` +
     `- Keep logos, flowers, illustrations, icons, and borders centered, aligned, and evenly spaced.\n` +
@@ -228,7 +232,7 @@ export function buildPatternDesignPrompt(params: {
         `This is output image ${variantIndex + 1} of ${variantTotal}.\n` +
         `Create exactly ${itemCount} distinct printable design${itemCount > 1 ? "s" : ""} in this image, covering logical item${itemCount > 1 ? "s" : ""} ${itemStart}${itemCount > 1 ? ` through ${itemEnd}` : ""} of ${logicalTotal}.\n` +
         (itemCount > 1
-          ? `Arrange the ${itemCount} designs in a tidy, front-facing grid or evenly spaced rows/columns on one clean canvas. Keep every design upright, separated, similarly sized, uncropped, and ready to export.\n`
+          ? `Arrange the ${itemCount} designs in a tidy, front-facing grid or evenly spaced rows/columns on one clean canvas. Keep every design upright, separated, uncropped, and ready to export. Use uniform scaling only for each design; do not force the designs to become similarly wide or similarly tall.\n`
           : `Make this image one standalone file-style artwork, not a combined sheet.\n`) +
         `If the request implies an ordered series such as months, alphabet letters, names, flowers, stickers, or logo options, use the matching consecutive items for this output image only.\n`
       : "";
@@ -267,8 +271,10 @@ export function buildImageEditPrompt(params: {
 
   const outputBlock = printablePattern
     ? `[Printable pattern constraints]\n` +
+      `[Non-negotiable proportion lock]\n` +
+      `Each extracted artwork must keep the same width-to-height ratio it has in the source image. Use uniform scaling only: X scale and Y scale must be identical. Never stretch, squash, widen, narrow, compress, expand, normalize, or reshape the artwork to fit a square canvas or matching box. Use whitespace instead of distortion.\n` +
       `Keep the result as flat 2D print-ready artwork. Use a clean white or transparent-looking background, keep text upright and readable, preserve crisp linework, and do not turn the design into a product mockup or lifestyle scene.\n` +
-      `Preserve the source artwork's proportions and bounding-box aspect ratio. Flatten or deskew perspective, but do not stretch, squash, widen, narrow, or force the design to fill a square canvas. Use whitespace when needed.\n`
+      `Flatten or deskew perspective, but after rectification preserve the source artwork's proportions, spacing, and subject scale.\n`
     : `[Edit constraints]\n` +
       `Make only the requested modification. Do not unexpectedly change product shape, camera angle, lighting, background, text, or decorative elements that the user did not ask to change.\n`;
 
@@ -278,7 +284,7 @@ export function buildImageEditPrompt(params: {
         `This is output image ${variantIndex + 1} of ${variantTotal}.\n` +
         `Create exactly ${itemCount} distinct output design${itemCount > 1 ? "s" : ""} in this image, covering logical item${itemCount > 1 ? "s" : ""} ${itemStart}${itemCount > 1 ? ` through ${itemEnd}` : ""} of ${logicalTotal}.\n` +
         (itemCount > 1
-          ? `Arrange the ${itemCount} designs neatly on one canvas with even spacing, consistent scale, upright orientation, clean margins, and no overlaps.\n`
+          ? `Arrange the ${itemCount} designs neatly on one canvas with even spacing, upright orientation, clean margins, and no overlaps. Use uniform scaling only for each design; do not force the designs to become similarly wide or similarly tall.\n`
           : `Make this image one standalone file-style artwork, not a combined sheet.\n`) +
         `If the request implies an ordered series such as months, alphabet letters, names, flowers, labels, panels, or options, use the matching consecutive items for this output image only.\n`
       : "";
